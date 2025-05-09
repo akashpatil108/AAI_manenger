@@ -1,0 +1,1417 @@
+<script type="text/javascript">
+        var gk_isXlsx = false;
+        var gk_xlsxFileLookup = {};
+        var gk_fileData = {};
+        function filledCell(cell) {
+          return cell !== '' && cell != null;
+        }
+        function loadFileData(filename) {
+        if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
+            try {
+                var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
+                var firstSheetName = workbook.SheetNames[0];
+                var worksheet = workbook.Sheets[firstSheetName];
+
+                // Convert sheet to JSON to filter blank rows
+                var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
+                // Filter out blank rows (rows where all cells are empty, null, or undefined)
+                var filteredData = jsonData.filter(row => row.some(filledCell));
+
+                // Heuristic to find the header row by ignoring rows with fewer filled cells than the next row
+                var headerRowIndex = filteredData.findIndex((row, index) =>
+                  row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
+                );
+                // Fallback
+                if (headerRowIndex === -1 || headerRowIndex > 25) {
+                  headerRowIndex = 0;
+                }
+
+                // Convert filtered JSON back to CSV
+                var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex)); // Create a new sheet from filtered array of arrays
+                csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
+                return csv;
+            } catch (e) {
+                console.error(e);
+                return "";
+            }
+        }
+        return gk_fileData[filename] || "";
+        }
+        </script><!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Arihant Agro Industries</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <style>
+        .section { display: none; }
+        .section.active { display: block; }
+        .modal { display: none; }
+        .modal.active { display: flex; }
+        .modal-content { max-height: 80vh; overflow-y: auto; }
+        .table-container { max-height: 70vh; overflow-y: auto; }
+        .sidebar { transition: width 0.3s; }
+        .sidebar:hover { width: 16rem; }
+        .toast { position: fixed; bottom: 20px; right: 20px; background: #333; color: white; padding: 10px 20px; border-radius: 5px; display: none; }
+        .toast.success { background: #10B981; }
+        .toast.error { background: #EF4444; }
+        .dark-mode { background-color: #1F2937; color: #F9FAFB; }
+        .dark-mode .bg-white { background-color: #374151; }
+        .dark-mode .bg-gray-50 { background-color: #4B5563; }
+        .dark-mode .text-gray-600 { color: #D1D5DB; }
+        .dark-mode .bg-indigo-900 { background-color: #4C1D95; }
+        .dark-mode .hover\:bg-indigo-700:hover { background-color: #5B21B6; }
+        .spinner { display: none; width: 16px; height: 16px; border: 2px solid #fff; border-top: 2px solid transparent; border-radius: 50%; animation: spin 1s linear infinite; margin-left: 8px; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        .input-error { border-color: #EF4444; }
+        .error-message { color: #EF4444; font-size: 0.75rem; display: none; }
+        @media (max-width: 768px) {
+            .sidebar { width: 4rem; }
+            .sidebar:hover { width: 12rem; }
+            .modal-content { width: 90%; }
+            .table-container { overflow-x: auto; }
+        }
+    </style>
+</head>
+<body class="bg-gray-100 font-sans">
+    <div class="flex h-screen">
+        <div class="fixed inset-y-0 left-0 w-16 bg-indigo-900 text-white sidebar flex flex-col items-center py-4 space-y-4">
+            <div class="text-2xl font-bold mb-10">AAI</div>
+            <button class="py-2 w-full text-center hover:bg-indigo-700" onclick="showSection('dashboard')" title="Dashboard" aria-label="Dashboard">🏠</button>
+            <button class="py-2 w-full text-center hover:bg-indigo-700" onclick="showSection('contacts')" title="Contacts" aria-label="Contacts">👥</button>
+            <button class="py-2 w-full text-center hover:bg-indigo-700" onclick="showSection('items')" title="Items" aria-label="Items">🛍️</button>
+            <button class="py-2 w-full text-center hover:bg-indigo-700" onclick="showSection('purchases')" title="Purchases" aria-label="Purchases">📥</button>
+            <button class="py-2 w-full text-center hover:bg-indigo-700" onclick="showSection('deliveryChallans')" title="Delivery Challans" aria-label="Delivery Challans">📤</button>
+            <button class="py-2 w-full text-center hover:bg-indigo-700" onclick="showSection('stock')" title="Stock" aria-label="Stock">📦</button>
+            <button class="py-2 w-full text-center hover:bg-indigo-700" onclick="toggleDarkMode()" title="Toggle Dark Mode" aria-label="Toggle Dark Mode">🌙</button>
+        </div>
+
+        <div class="ml-16 p-6 flex-1 overflow-auto">
+            <div id="dashboard" class="section active">
+                <h1 class="text-3xl font-bold text-indigo-900 mb-6">Dashboard</h1>
+                <p>Please upload the Excel file to load data:</p>
+                <input type="file" id="excelFileInput" accept=".xlsx" onchange="loadExcelFile(event)" class="mb-4" />
+                <button class="bg-indigo-600 text-white px-4 py-2 rounded hover:bg-indigo-700" onclick="saveToExcel()">Save to Excel</button>
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mt-6">
+                    <div class="bg-white p-4 rounded-lg shadow-md">
+                        <p class="text-gray-600">Total Contacts</p>
+                        <p class="text-2xl font-semibold" id="totalContacts">0</p>
+                    </div>
+                    <div class="bg-white p-4 rounded-lg shadow-md">
+                        <p class="text-gray-600">Total Items</p>
+                        <p class="text-2xl font-semibold" id="totalItems">0</p>
+                    </div>
+                    <div class="bg-white p-4 rounded-lg shadow-md">
+                        <p class="text-gray-600">Total Purchases</p>
+                        <p class="text-2xl font-semibold" id="totalPurchases">0</p>
+                    </div>
+                    <div class="bg-white p-4 rounded-lg shadow-md">
+                        <p class="text-gray-600">Total Delivery Challans</p>
+                        <p class="text-2xl font-semibold" id="totalDeliveryChallans">0</p>
+                    </div>
+                </div>
+            </div>
+
+            <div id="contacts" class="section">
+                <div class="flex justify-between items-center mb-6">
+                    <h1 class="text-3xl font-bold text-indigo-900">Contacts</h1>
+                    <div>
+                        <button class="bg-indigo-600 text-white px-4 py-2 rounded hover:bg-indigo-700 mr-2" onclick="exportToCSV('contactsTable', 'contacts.csv')">Export to CSV</button>
+                        <button class="bg-indigo-600 text-white px-4 py-2 rounded hover:bg-indigo-700" onclick="openContactModal()">Add Contact</button>
+                    </div>
+                </div>
+                <input type="text" id="contactsSearch" class="mb-4 p-2 border border-gray-300 rounded-md w-full" placeholder="Search contacts..." onkeyup="filterTable('contactsTable', this.value)">
+                <div class="table-container bg-white rounded-lg shadow-md overflow-x-auto">
+                    <table class="min-w-full divide-y divide-gray-200">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer" onclick="sortTable('contactsTable', 0)">ID</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer" onclick="sortTable('contactsTable', 1)">Name</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer" onclick="sortTable('contactsTable', 2)">Type</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Contact</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Address</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">GST No.</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="contactsTable" class="bg-white divide-y divide-gray-200"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div id="items" class="section">
+                <div class="flex justify-between items-center mb-6">
+                    <h1 class="text-3xl font-bold text-indigo-900">Items</h1>
+                    <div>
+                        <button class="bg-indigo-600 text-white px-4 py-2 rounded hover:bg-indigo-700 mr-2" onclick="exportToCSV('itemsTable', 'items.csv')">Export to CSV</button>
+                        <button class="bg-indigo-600 text-white px-4 py-2 rounded hover:bg-indigo-700" onclick="openItemModal()">Add Item</button>
+                    </div>
+                </div>
+                <input type="text" id="itemsSearch" class="mb-4 p-2 border border-gray-300 rounded-md w-full" placeholder="Search items..." onkeyup="filterTable('itemsTable', this.value)">
+                <div class="table-container bg-white rounded-lg shadow-md overflow-x-auto">
+                    <table class="min-w-full divide-y divide-gray-200">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer" onclick="sortTable('itemsTable', 0)">ID</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer" onclick="sortTable('itemsTable', 1)">Name</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Unit</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">HSN Code</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">GST %</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="itemsTable" class="bg-white divide-y divide-gray-200"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div id="purchases" class="section">
+                <div class="flex justify-between items-center mb-6">
+                    <h1 class="text-3xl font-bold text-indigo-900">Purchases</h1>
+                    <button class="bg-indigo-600 text-white px-4 py-2 rounded hover:bg-indigo-700" onclick="openPurchaseModal()">Add Purchase</button>
+                </div>
+                <input type="text" id="purchasesSearch" class="mb-4 p-2 border border-gray-300 rounded-md w-full" placeholder="Search purchases..." onkeyup="filterTable('purchasesTable', this.value)">
+                <div class="table-container bg-white rounded-lg shadow-md overflow-x-auto">
+                    <table class="min-w-full divide-y divide-gray-200">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer" onclick="sortTable('purchasesTable', 0)">ID</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer" onclick="sortTable('purchasesTable', 1)">Date</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Supplier</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Items</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Payment Status</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Payment Date</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="purchasesTable" class="bg-white divide-y divide-gray-200"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div id="deliveryChallans" class="section">
+                <div class="flex justify-between items-center mb-6">
+                    <h1 class="text-3xl font-bold text-indigo-900">Delivery Challans</h1>
+                    <button class="bg-indigo-600 text-white px-4 py-2 rounded hover:bg-indigo-700" onclick="openDeliveryChallanModal()">Add Delivery Challan</button>
+                </div>
+                <input type="text" id="deliveryChallansSearch" class="mb-4 p-2 border border-gray-300 rounded-md w-full" placeholder="Search delivery challans..." onkeyup="filterTable('deliveryChallansTable', this.value)">
+                <div class="table-container bg-white rounded-lg shadow-md overflow-x-auto">
+                    <table class="min-w-full divide-y divide-gray-200">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer" onclick="sortTable('deliveryChallansTable', 0)">ID</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer" onclick="sortTable('deliveryChallansTable', 1)">Challan No.</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer" onclick="sortTable('deliveryChallansTable', 2)">Date</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Party</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Items</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Payment Status</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Payment Date</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="deliveryChallansTable" class="bg-white divide-y divide-gray-200"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div id="stock" class="section">
+                <div class="flex justify-between items-center mb-6">
+                    <h1 class="text-3xl font-bold text-indigo-900">Stock</h1>
+                    <button class="bg-indigo-600 text-white px-4 py-2 rounded hover:bg-indigo-700" onclick="openStockModal()">Add Stock</button>
+                </div>
+                <div class="table-container bg-white rounded-lg shadow-md overflow-x-auto">
+                    <table class="min-w-full divide-y divide-gray-200">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer" onclick="sortTable('stockTable', 0)">Item</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Quantity</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Unit</th>
+                            </tr>
+                        </thead>
+                        <tbody id="stockTable" class="bg-white divide-y divide-gray-200"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="addContactModal" class="modal fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center">
+        <div class="modal-content bg-white p-6 rounded-lg shadow-xl w-full max-w-md">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-xl font-bold" id="contactModalTitle">Add Contact</h3>
+                <button class="text-gray-500 hover:text-gray-700" onclick="closeModal('addContactModal')">✕</button>
+            </div>
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Type</label>
+                    <select id="contactType" class="mt-1 block w-full p-2 border border-gray-300 rounded-md" required>
+                        <option value="supplier">Supplier</option>
+                        <option value="party">Party</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Name</label>
+                    <input type="text" id="contactName" class="mt-1 block w-full p-2 border border-gray-300 rounded-md" required>
+                    <span class="error-message" id="contactNameError">Name is required</span>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Contact</label>
+                    <input type="text" id="contactContact" class="mt-1 block w-full p-2 border border-gray-300 rounded-md" pattern="[0-9]{10}" title="Enter a 10-digit contact number" oninput="validateContact(this)">
+                    <span class="error-message" id="contactContactError">Must be a 10-digit number</span>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Address</label>
+                    <textarea id="contactAddress" class="mt-1 block w-full p-2 border border-gray-300 rounded-md"></textarea>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">GST No.</label>
+                    <input type="text" id="contactGST" class="mt-1 block w-full p-2 border border-gray-300 rounded-md" pattern="[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[0-9A-Z]{1}Z[0-9A-Z]{1}" title="Enter a valid GST number (e.g., 22ABCDE1234F1Z5)" oninput="validateGST(this)">
+                    <span class="error-message" id="contactGSTError">Invalid GST format</span>
+                </div>
+            </div>
+            <div class="mt-6 flex justify-end space-x-3">
+                <button class="bg-gray-300 text-gray-700 px-4 py-2 rounded hover:bg-gray-400" onclick="closeModal('addContactModal')">Cancel</button>
+                <button class="bg-indigo-600 text-white px-4 py-2 rounded hover:bg-indigo-700 flex items-center" onclick="saveContact()">
+                    <span>Save</span>
+                    <span class="spinner" id="contactSaveSpinner"></span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div id="addItemModal" class="modal fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center">
+        <div class="modal-content bg-white p-6 rounded-lg shadow-xl w-full max-w-md">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-xl font-bold" id="itemModalTitle">Add Item</h3>
+                <button class="text-gray-500 hover:text-gray-700" onclick="closeModal('addItemModal')">✕</button>
+            </div>
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Name</label>
+                    <input type="text" id="itemName" class="mt-1 block w-full p-2 border border-gray-300 rounded-md" required>
+                    <span class="error-message" id="itemNameError">Name is required</span>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Unit</label>
+                    <input type="text" id="itemUnit" class="mt-1 block w-full p-2 border border-gray-300 rounded-md" required>
+                    <span class="error-message" id="itemUnitError">Unit is required</span>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">HSN Code</label>
+                    <input type="text" id="itemHSN" class="mt-1 block w-full p-2 border border-gray-300 rounded-md">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">GST %</label>
+                    <input type="number" id="itemGST" class="mt-1 block w-full p-2 border border-gray-300 rounded-md" step="0.01" min="0" oninput="validateGSTPercentage(this)">
+                    <span class="error-message" id="itemGSTError">Cannot be negative</span>
+                </div>
+            </div>
+            <div class="mt-6 flex justify-end space-x-3">
+                <button class="bg-gray-300 text-gray-700 px-4 py-2 rounded hover:bg-gray-400" onclick="closeModal('addItemModal')">Cancel</button>
+                <button class="bg-indigo-600 text-white px-4 py-2 rounded hover:bg-indigo-700 flex items-center" onclick="saveItem()">
+                    <span>Save</span>
+                    <span class="spinner" id="itemSaveSpinner"></span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div id="addPurchaseModal" class="modal fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center">
+        <div class="modal-content bg-white p-6 rounded-lg shadow-xl w-full max-w-md">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-xl font-bold" id="purchaseModalTitle">Add Purchase</h3>
+                <button class="text-gray-500 hover:text-gray-700" onclick="closeModal('addPurchaseModal')">✕</button>
+            </div>
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Date</label>
+                    <input type="date" id="purchaseDate" class="mt-1 block w-full p-2 border border-gray-300 rounded-md" required>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Supplier</label>
+                    <select id="purchaseSupplier" class="mt-1 block w-full p-2 border border-gray-300 rounded-md" required></select>
+                </div>
+                <div id="purchaseItems">
+                    <div class="purchase-item space-y-2">
+                        <label class="block text-sm font-medium text-gray-700">Item</label>
+                        <select class="purchaseItemSelect mt-1 block w-full p-2 border border-gray-300 rounded-md" required></select>
+                        <label class="block text-sm font-medium text-gray-700">Quantity</label>
+                        <input type="number" class="purchaseQuantity mt-1 block w-full p-2 border border-gray-300 rounded-md" required min="1">
+                        <label class="block text-sm font-medium text-gray-700">Price (per unit)</label>
+                        <input type="number" class="purchasePrice mt-1 block w-full p-2 border border-gray-300 rounded-md" step="0.01" required min="0">
+                        <label class="block text-sm font-medium text-gray-700">Enable GST</label>
+                        <input type="checkbox" class="purchaseEnableGST mt-1">
+                    </div>
+                </div>
+                <button class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 mt-4" onclick="addPurchaseItem()">Add Item</button>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Payment Status</label>
+                    <select id="purchasePaymentStatus" class="mt-1 block w-full p-2 border border-gray-300 rounded-md" required>
+                        <option value="pending">Pending</option>
+                        <option value="paid">Paid</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Payment Date</label>
+                    <input type="date" id="purchasePaymentDate" class="mt-1 block w-full p-2 border border-gray-300 rounded-md">
+                </div>
+            </div>
+            <div class="mt-6 flex justify-end space-x-3">
+                <button class="bg-gray-300 text-gray-700 px-4 py-2 rounded hover:bg-gray-400" onclick="closeModal('addPurchaseModal')">Cancel</button>
+                <button class="bg-indigo-600 text-white px-4 py-2 rounded hover:bg-indigo-700 flex items-center" onclick="savePurchase()">
+                    <span>Save</span>
+                    <span class="spinner" id="purchaseSaveSpinner"></span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div id="addDeliveryChallanModal" class="modal fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center">
+        <div class="modal-content bg-white p-6 rounded-lg shadow-xl w-full max-w-md">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-xl font-bold" id="deliveryChallanModalTitle">Add Delivery Challan</h3>
+                <button class="text-gray-500 hover:text-gray-700" onclick="closeModal('addDeliveryChallanModal')">✕</button>
+            </div>
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Challan No.</label>
+                    <input type="text" id="deliveryChallanNo" class="mt-1 block w-full p-2 border border-gray-300 rounded-md" required>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Date</label>
+                    <input type="date" id="deliveryChallanDate" class="mt-1 block w-full p-2 border border-gray-300 rounded-md" required>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Party</label>
+                    <select id="deliveryChallanParty" class="mt-1 block w-full p-2 border border-gray-300 rounded-md" required></select>
+                </div>
+                <div id="deliveryChallanItems">
+                    <div class="delivery-challan-item space-y-2">
+                        <label class="block text-sm font-medium text-gray-700">Item</label>
+                        <select class="deliveryChallanItemSelect mt-1 block w-full p-2 border border-gray-300 rounded-md" required></select>
+                        <label class="block text-sm font-medium text-gray-700">Quantity</label>
+                        <input type="number" class="deliveryChallanQuantity mt-1 block w-full p-2 border border-gray-300 rounded-md" required min="1">
+                        <label class="block text-sm font-medium text-gray-700">Price (per unit)</label>
+                        <input type="number" class="deliveryChallanPrice mt-1 block w-full p-2 border border-gray-300 rounded-md" step="0.01" required min="0">
+                        <label class="block text-sm font-medium text-gray-700">Enable GST</label>
+                        <input type="checkbox" class="deliveryChallanEnableGST mt-1">
+                    </div>
+                </div>
+                <button class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 mt-4" onclick="addDeliveryChallanItem()">Add Item</button>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Payment Status</label>
+                    <select id="deliveryChallanPaymentStatus" class="mt-1 block w-full p-2 border border-gray-300 rounded-md" required>
+                        <option value="pending">Pending</option>
+                        <option value="paid">Paid</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Payment Date</label>
+                    <input type="date" id="deliveryChallanPaymentDate" class="mt-1 block w-full p-2 border border-gray-300 rounded-md">
+                </div>
+            </div>
+            <div class="mt-6 flex justify-end space-x-3">
+                <button class="bg-gray-300 text-gray-700 px-4 py-2 rounded hover:bg-gray-400" onclick="closeModal('addDeliveryChallanModal')">Cancel</button>
+                <button class="bg-indigo-600 text-white px-4 py-2 rounded hover:bg-indigo-700 flex items-center" onclick="saveDeliveryChallan()">
+                    <span>Save</span>
+                    <span class="spinner" id="deliveryChallanSaveSpinner"></span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div id="addStockModal" class="modal fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center">
+        <div class="modal-content bg-white p-6 rounded-lg shadow-xl w-full max-w-md">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-xl font-bold">Add Stock</h3>
+                <button class="text-gray-500 hover:text-gray-700" onclick="closeModal('addStockModal')">✕</button>
+            </div>
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Item</label>
+                    <select id="stockItem" class="mt-1 block w-full p-2 border border-gray-300 rounded-md" required></select>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Quantity</label>
+                    <input type="number" id="stockQuantity" class="mt-1 block w-full p-2 border border-gray-300 rounded-md" required min="1">
+                </div>
+            </div>
+            <div class="mt-6 flex justify-end space-x-3">
+                <button class="bg-gray-300 text-gray-700 px-4 py-2 rounded hover:bg-gray-400" onclick="closeModal('addStockModal')">Cancel</button>
+                <button class="bg-indigo-600 text-white px-4 py-2 rounded hover:bg-indigo-700 flex items-center" onclick="addStock()">
+                    <span>Save</span>
+                    <span class="spinner" id="stockSaveSpinner"></span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div id="toast" class="toast"></div>
+
+    <script>
+        var gk_isXlsx = false;
+        var gk_xlsxFileLookup = {};
+        var gk_fileData = {};
+        function filledCell(cell) {
+          return cell !== '' && cell != null;
+        }
+        function loadFileData(filename) {
+            if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
+                try {
+                    var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
+                    var firstSheetName = workbook.SheetNames[0];
+                    var worksheet = workbook.Sheets[firstSheetName];
+                    var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
+                    var filteredData = jsonData.filter(row => row.some(filledCell));
+                    var headerRowIndex = filteredData.findIndex((row, index) =>
+                      row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
+                    );
+                    if (headerRowIndex === -1 || headerRowIndex > 25) {
+                      headerRowIndex = 0;
+                    }
+                    var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex));
+                    csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
+                    return csv;
+                } catch (e) {
+                    console.error(e);
+                    return "";
+                }
+            }
+            return gk_fileData[filename] || "";
+        }
+
+        let data = {
+            contacts: [],
+            items: [],
+            purchases: [],
+            deliveryChallans: [],
+            stock: []
+        };
+
+        let editingContactId = null;
+        let editingItemId = null;
+        let editingPurchaseId = null;
+        let editingDeliveryChallanId = null;
+
+        function loadExcelFile(event) {
+            const file = event.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    const fileData = e.target.result;
+                    const workbook = XLSX.read(fileData, { type: 'binary' });
+                    parseWorkbook(workbook);
+                    showToast('Excel file loaded successfully', 'success');
+                };
+                reader.readAsBinaryString(file);
+            } else {
+                showToast('No file selected', 'error');
+            }
+        }
+
+        function parseWorkbook(workbook) {
+            data.contacts = XLSX.utils.sheet_to_json(workbook.Sheets['contacts'] || {}).map(c => ({
+                id: Number(c.id),
+                type: c.type,
+                name: c.name,
+                contact: c.contact,
+                address: c.address,
+                gst: c.gst
+            }));
+            data.items = XLSX.utils.sheet_to_json(workbook.Sheets['items'] || {}).map(i => ({
+                id: Number(i.id),
+                name: i.name,
+                unit: i.unit,
+                hsnCode: i.hsnCode,
+                gstPercentage: Number(i.gstPercentage)
+            }));
+            data.purchases = XLSX.utils.sheet_to_json(workbook.Sheets['purchases'] || {}).map(p => ({
+                id: Number(p.id),
+                date: p.date,
+                supplierId: Number(p.supplierId),
+                items: JSON.parse(p.items || '[]'),
+                paymentStatus: p.paymentStatus,
+                paymentDate: p.paymentDate
+            }));
+            data.deliveryChallans = XLSX.utils.sheet_to_json(workbook.Sheets['deliveryChallans'] || {}).map(d => ({
+                id: Number(d.id),
+                challanNo: d.challanNo,
+                date: d.date,
+                partyId: Number(d.partyId),
+                items: JSON.parse(d.items || '[]'),
+                paymentStatus: d.paymentStatus,
+                paymentDate: d.paymentDate
+            }));
+            data.stock = XLSX.utils.sheet_to_json(workbook.Sheets['stock'] || {}).map(s => ({
+                itemId: Number(s.itemId),
+                quantity: Number(s.quantity)
+            }));
+            updateUI();
+        }
+
+        function saveToExcel() {
+            const workbook = XLSX.utils.book_new();
+            
+            const contactsSheet = XLSX.utils.json_to_sheet(data.contacts);
+            XLSX.utils.book_append_sheet(workbook, contactsSheet, 'contacts');
+            
+            const itemsSheet = XLSX.utils.json_to_sheet(data.items);
+            XLSX.utils.book_append_sheet(workbook, itemsSheet, 'items');
+            
+            const purchasesData = data.purchases.map(p => ({
+                id: p.id,
+                date: p.date,
+                supplierId: p.supplierId,
+                items: JSON.stringify(p.items),
+                paymentStatus: p.paymentStatus,
+                paymentDate: p.paymentDate
+            }));
+            const purchasesSheet = XLSX.utils.json_to_sheet(purchasesData);
+            XLSX.utils.book_append_sheet(workbook, purchasesSheet, 'purchases');
+            
+            const deliveryChallansData = data.deliveryChallans.map(d => ({
+                id: d.id,
+                challanNo: d.challanNo,
+                date: d.date,
+                partyId: d.partyId,
+                items: JSON.stringify(d.items),
+                paymentStatus: d.paymentStatus,
+                paymentDate: d.paymentDate
+            }));
+            const deliveryChallansSheet = XLSX.utils.json_to_sheet(deliveryChallansData);
+            XLSX.utils.book_append_sheet(workbook, deliveryChallansSheet, 'deliveryChallans');
+            
+            const stockSheet = XLSX.utils.json_to_sheet(data.stock);
+            XLSX.utils.book_append_sheet(workbook, stockSheet, 'stock');
+            
+            XLSX.writeFile(workbook, 'data.xlsx');
+            showToast('Data saved to Excel file', 'success');
+        }
+
+        function saveData() {
+            updateUI();
+            showToast('Data updated', 'success');
+        }
+
+        function showSection(sectionId) {
+            document.querySelectorAll('.section').forEach(section => section.classList.remove('active'));
+            document.getElementById(sectionId).classList.add('active');
+        }
+
+        function openModal(modalId) {
+            document.getElementById(modalId).classList.add('active');
+            if (modalId === 'addPurchaseModal') {
+                populatePurchaseDropdowns();
+            } else if (modalId === 'addDeliveryChallanModal') {
+                populateDeliveryChallanDropdowns();
+            }
+        }
+
+        function closeModal(modalId) {
+            document.getElementById(modalId).classList.remove('active');
+            document.querySelectorAll(`#${modalId} input, #${modalId} select`).forEach(input => {
+                input.value = input.type === 'select-one' ? '' : '';
+                input.classList.remove('input-error');
+                const errorSpan = document.getElementById(`${input.id}Error`);
+                if (errorSpan) errorSpan.style.display = 'none';
+            });
+            if (modalId === 'addPurchaseModal') {
+                document.getElementById('purchaseItems').innerHTML = `
+                    <div class="purchase-item space-y-2">
+                        <label class="block text-sm font-medium text-gray-700">Item</label>
+                        <select class="purchaseItemSelect mt-1 block w-full p-2 border border-gray-300 rounded-md" required></select>
+                        <label class="block text-sm font-medium text-gray-700">Quantity</label>
+                        <input type="number" class="purchaseQuantity mt-1 block w-full p-2 border border-gray-300 rounded-md" required min="1">
+                        <label class="block text-sm font-medium text-gray-700">Price (per unit)</label>
+                        <input type="number" class="purchasePrice mt-1 block w-full p-2 border border-gray-300 rounded-md" step="0.01" required min="0">
+                        <label class="block text-sm font-medium text-gray-700">Enable GST</label>
+                        <input type="checkbox" class="purchaseEnableGST mt-1">
+                    </div>
+                `;
+                populateItemDropdown(document.querySelector('.purchaseItemSelect'));
+            } else if (modalId === 'addDeliveryChallanModal') {
+                document.getElementById('deliveryChallanItems').innerHTML = `
+                    <div class="delivery-challan-item space-y-2">
+                        <label class="block text-sm font-medium text-gray-700">Item</label>
+                        <select class="deliveryChallanItemSelect mt-1 block w-full p-2 border border-gray-300 rounded-md" required></select>
+                        <label class="block text-sm font-medium text-gray-700">Quantity</label>
+                        <input type="number" class="deliveryChallanQuantity mt-1 block w-full p-2 border border-gray-300 rounded-md" required min="1">
+                        <label class="block text-sm font-medium text-gray-700">Price (per unit)</label>
+                        <input type="number" class="deliveryChallanPrice mt-1 block w-full p-2 border border-gray-300 rounded-md" step="0.01" required min="0">
+                        <label class="block text-sm font-medium text-gray-700">Enable GST</label>
+                        <input type="checkbox" class="deliveryChallanEnableGST mt-1">
+                    </div>
+                `;
+                populateItemDropdown(document.querySelector('.deliveryChallanItemSelect'));
+            }
+        }
+
+        function populateDropdown(selectId, dataArray, valueKey, textKey) {
+            const select = document.getElementById(selectId);
+            select.innerHTML = '<option value="">Select</option>';
+            dataArray.forEach(item => {
+                const option = document.createElement('option');
+                option.value = item[valueKey];
+                option.textContent = item[textKey];
+                select.appendChild(option);
+            });
+        }
+
+        function populateItemDropdown(select) {
+            select.innerHTML = '<option value="">Select Item</option>';
+            data.items.forEach(item => {
+                const option = document.createElement('option');
+                option.value = item.id;
+                option.textContent = item.name;
+                select.appendChild(option);
+            });
+        }
+
+        function showToast(message, type = 'success') {
+            const toast = document.getElementById('toast');
+            toast.textContent = message;
+            toast.classList.add(type);
+            toast.style.display = 'block';
+            setTimeout(() => {
+                toast.style.display = 'none';
+                toast.classList.remove(type);
+            }, 3000);
+        }
+
+        function filterTable(tableId, query) {
+            const table = document.getElementById(tableId);
+            const rows = table.getElementsByTagName('tr');
+            for (let i = 0; i < rows.length; i++) {
+                const row = rows[i];
+                const text = row.textContent.toLowerCase();
+                row.style.display = text.includes(query.toLowerCase()) ? '' : 'none';
+            }
+        }
+
+        function sortTable(tableId, colIndex) {
+            const table = document.getElementById(tableId);
+            const rows = Array.from(table.rows);
+            const isAscending = table.dataset.sortDir !== 'asc';
+            rows.sort((a, b) => {
+                const aVal = a.cells[colIndex].textContent.trim();
+                const bVal = b.cells[colIndex].textContent.trim();
+                return isAscending ? aVal.localeCompare(bVal, undefined, { numeric: true }) : bVal.localeCompare(aVal, undefined, { numeric: true });
+            });
+            table.innerHTML = '';
+            rows.forEach(row => table.appendChild(row));
+            table.dataset.sortDir = isAscending ? 'asc' : 'desc';
+        }
+
+        function toggleDarkMode() {
+            document.body.classList.toggle('dark-mode');
+            localStorage.setItem('darkMode', document.body.classList.contains('dark-mode'));
+        }
+
+        function exportToCSV(tableId, filename) {
+            const table = document.getElementById(tableId);
+            const rows = table.querySelectorAll('tr');
+            let csv = [];
+            rows.forEach(row => {
+                const cols = row.querySelectorAll('td, th');
+                const rowData = Array.from(cols).map(col => `"${col.textContent.replace(/"/g, '""')}"`).join(',');
+                csv.push(rowData);
+            });
+            const csvContent = csv.join('\n');
+            const blob = new Blob([csvContent], { type: 'text/csv' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+
+        function addPurchaseItem() {
+            const purchaseItems = document.getElementById('purchaseItems');
+            const newItem = document.createElement('div');
+            newItem.classList.add('purchase-item', 'space-y-2');
+            newItem.innerHTML = `
+                <label class="block text-sm font-medium text-gray-700">Item</label>
+                <select class="purchaseItemSelect mt-1 block w-full p-2 border border-gray-300 rounded-md" required></select>
+                <label class="block text-sm font-medium text-gray-700">Quantity</label>
+                <input type="number" class="purchaseQuantity mt-1 block w-full p-2 border border-gray-300 rounded-md" required min="1">
+                <label class="block text-sm font-medium text-gray-700">Price (per unit)</label>
+                <input type="number" class="purchasePrice mt-1 block w-full p-2 border border-gray-300 rounded-md" step="0.01" required min="0">
+                <label class="block text-sm font-medium text-gray-700">Enable GST</label>
+                <input type="checkbox" class="purchaseEnableGST mt-1">
+            `;
+            purchaseItems.appendChild(newItem);
+            populateItemDropdown(newItem.querySelector('.purchaseItemSelect'));
+        }
+
+        function addDeliveryChallanItem() {
+            const deliveryChallanItems = document.getElementById('deliveryChallanItems');
+            const newItem = document.createElement('div');
+            newItem.classList.add('delivery-challan-item', 'space-y-2');
+            newItem.innerHTML = `
+                <label class="block text-sm font-medium text-gray-700">Item</label>
+                <select class="deliveryChallanItemSelect mt-1 block w-full p-2 border border-gray-300 rounded-md" required></select>
+                <label class="block text-sm font-medium text-gray-700">Quantity</label>
+                <input type="number" class="deliveryChallanQuantity mt-1 block w-full p-2 border border-gray-300 rounded-md" required min="1">
+                <label class="block text-sm font-medium text-gray-700">Price (per unit)</label>
+                <input type="number" class="deliveryChallanPrice mt-1 block w-full p-2 border border-gray-300 rounded-md" step="0.01" required min="0">
+                <label class="block text-sm font-medium text-gray-700">Enable GST</label>
+                <input type="checkbox" class="deliveryChallanEnableGST mt-1">
+            `;
+            deliveryChallanItems.appendChild(newItem);
+            populateItemDropdown(newItem.querySelector('.deliveryChallanItemSelect'));
+        }
+
+        function validateContact(input) {
+            const value = input.value.trim();
+            const errorSpan = document.getElementById('contactContactError');
+            if (value && !/^[0-9]{10}$/.test(value)) {
+                input.classList.add('input-error');
+                errorSpan.style.display = 'block';
+            } else {
+                input.classList.remove('input-error');
+                errorSpan.style.display = 'none';
+            }
+        }
+
+        function validateGST(input) {
+            const value = input.value.trim();
+            const errorSpan = document.getElementById('contactGSTError');
+            if (value && !/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[0-9A-Z]{1}Z[0-9A-Z]{1}$/.test(value)) {
+                input.classList.add('input-error');
+                errorSpan.style.display = 'block';
+            } else {
+                input.classList.remove('input-error');
+                errorSpan.style.display = 'none';
+            }
+        }
+
+        function validateGSTPercentage(input) {
+            const value = parseFloat(input.value);
+            const errorSpan = document.getElementById('itemGSTError');
+            if (value < 0) {
+                input.classList.add('input-error');
+                errorSpan.style.display = 'block';
+            } else {
+                input.classList.remove('input-error');
+                errorSpan.style.display = 'none';
+            }
+        }
+
+        function showSpinner(id) {
+            document.getElementById(id).style.display = 'inline-block';
+        }
+
+        function hideSpinner(id) {
+            document.getElementById(id).style.display = 'none';
+        }
+
+        function openContactModal(id = null) {
+            editingContactId = id;
+            document.getElementById('contactModalTitle').textContent = id ? 'Edit Contact' : 'Add Contact';
+            document.getElementById('contactType').value = 'supplier';
+            document.getElementById('contactName').value = '';
+            document.getElementById('contactContact').value = '';
+            document.getElementById('contactAddress').value = '';
+            document.getElementById('contactGST').value = '';
+            if (id) {
+                const contact = data.contacts.find(c => c.id === id);
+                if (contact) {
+                    document.getElementById('contactType').value = contact.type;
+                    document.getElementById('contactName').value = contact.name;
+                    document.getElementById('contactContact').value = contact.contact || '';
+                    document.getElementById('contactAddress').value = contact.address || '';
+                    document.getElementById('contactGST').value = contact.gst || '';
+                }
+            }
+            openModal('addContactModal');
+        }
+
+        function saveContact() {
+            showSpinner('contactSaveSpinner');
+            const type = document.getElementById('contactType').value;
+            const name = document.getElementById('contactName').value.trim();
+            const contact = document.getElementById('contactContact').value.trim();
+            const address = document.getElementById('contactAddress').value.trim();
+            const gst = document.getElementById('contactGST').value.trim();
+            if (!name) {
+                showToast('Name is required', 'error');
+                hideSpinner('contactSaveSpinner');
+                return;
+            }
+            if (contact && !/^[0-9]{10}$/.test(contact)) {
+                showToast('Contact must be a 10-digit number', 'error');
+                hideSpinner('contactSaveSpinner');
+                return;
+            }
+            if (gst && !/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[0-9A-Z]{1}Z[0-9A-Z]{1}$/.test(gst)) {
+                showToast('Invalid GST number format', 'error');
+                hideSpinner('contactSaveSpinner');
+                return;
+            }
+            const contactData = { type, name, contact, address, gst };
+            if (editingContactId) {
+                const index = data.contacts.findIndex(c => c.id === editingContactId);
+                if (index !== -1) data.contacts[index] = { id: editingContactId, ...contactData };
+            } else {
+                data.contacts.push({ id: Date.now(), ...contactData });
+            }
+            editingContactId = null;
+            saveData();
+            hideSpinner('contactSaveSpinner');
+            closeModal('addContactModal');
+        }
+
+        function openItemModal(id = null) {
+            editingItemId = id;
+            document.getElementById('itemModalTitle').textContent = id ? 'Edit Item' : 'Add Item';
+            document.getElementById('itemName').value = '';
+            document.getElementById('itemUnit').value = '';
+            document.getElementById('itemHSN').value = '';
+            document.getElementById('itemGST').value = '';
+            if (id) {
+                const item = data.items.find(i => i.id === id);
+                if (item) {
+                    document.getElementById('itemName').value = item.name;
+                    document.getElementById('itemUnit').value = item.unit;
+                    document.getElementById('itemHSN').value = item.hsnCode || '';
+                    document.getElementById('itemGST').value = item.gstPercentage || '';
+                }
+            }
+            openModal('addItemModal');
+        }
+
+        function saveItem() {
+            showSpinner('itemSaveSpinner');
+            const name = document.getElementById('itemName').value.trim();
+            const unit = document.getElementById('itemUnit').value.trim();
+            const hsnCode = document.getElementById('itemHSN').value.trim();
+            const gstPercentage = parseFloat(document.getElementById('itemGST').value) || 0;
+            if (!name || !unit) {
+                showToast('Name and Unit are required', 'error');
+                hideSpinner('itemSaveSpinner');
+                return;
+            }
+            if (gstPercentage < 0) {
+                showToast('GST percentage cannot be negative', 'error');
+                hideSpinner('itemSaveSpinner');
+                return;
+            }
+            const itemData = { name, unit, hsnCode, gstPercentage };
+            if (editingItemId) {
+                const index = data.items.findIndex(i => i.id === editingItemId);
+                if (index !== -1) data.items[index] = { id: editingItemId, ...itemData };
+            } else {
+                data.items.push({ id: Date.now(), ...itemData });
+            }
+            editingItemId = null;
+            saveData();
+            hideSpinner('itemSaveSpinner');
+            closeModal('addItemModal');
+        }
+
+        function openPurchaseModal(id = null) {
+            editingPurchaseId = id;
+            document.getElementById('purchaseModalTitle').textContent = id ? 'Edit Purchase' : 'Add Purchase';
+            populatePurchaseDropdowns();
+            document.getElementById('purchaseDate').value = '';
+            document.getElementById('purchaseSupplier').value = '';
+            document.getElementById('purchasePaymentStatus').value = 'pending';
+            document.getElementById('purchasePaymentDate').value = '';
+            document.getElementById('purchaseItems').innerHTML = `
+                <div class="purchase-item space-y-2">
+                    <label class="block text-sm font-medium text-gray-700">Item</label>
+                    <select class="purchaseItemSelect mt-1 block w-full p-2 border border-gray-300 rounded-md" required></select>
+                    <label class="block text-sm font-medium text-gray-700">Quantity</label>
+                    <input type="number" class="purchaseQuantity mt-1 block w-full p-2 border border-gray-300 rounded-md" required min="1">
+                    <label class="block text-sm font-medium text-gray-700">Price (per unit)</label>
+                    <input type="number" class="purchasePrice mt-1 block w-full p-2 border border-gray-300 rounded-md" step="0.01" required min="0">
+                    <label class="block text-sm font-medium text-gray-700">Enable GST</label>
+                    <input type="checkbox" class="purchaseEnableGST mt-1">
+                </div>
+            `;
+            populateItemDropdown(document.querySelector('.purchaseItemSelect'));
+            if (id) {
+                const purchase = data.purchases.find(p => p.id === id);
+                if (purchase) {
+                    document.getElementById('purchaseDate').value = purchase.date || '';
+                    document.getElementById('purchaseSupplier').value = purchase.supplierId || '';
+                    document.getElementById('purchasePaymentStatus').value = purchase.paymentStatus || 'pending';
+                    document.getElementById('purchasePaymentDate').value = purchase.paymentDate || '';
+                    document.getElementById('purchaseItems').innerHTML = '';
+                    if (purchase.items && Array.isArray(purchase.items)) {
+                        purchase.items.forEach(item => {
+                            const newItem = document.createElement('div');
+                            newItem.classList.add('purchase-item', 'space-y-2');
+                            newItem.innerHTML = `
+                                <label class="block text-sm font-medium text-gray-700">Item</label>
+                                <select class="purchaseItemSelect mt-1 block w-full p-2 border border-gray-300 rounded-md" required></select>
+                                <label class="block text-sm font-medium text-gray-700">Quantity</label>
+                                <input type="number" class="purchaseQuantity mt-1 block w-full p-2 border border-gray-300 rounded-md" value="${item.quantity}" required min="1">
+                                <label class="block text-sm font-medium text-gray-700">Price (per unit)</label>
+                                <input type="number" class="purchasePrice mt-1 block w-full p-2 border border-gray-300 rounded-md" step="0.01" value="${item.pricePerUnit}" required min="0">
+                                <label class="block text-sm font-medium text-gray-700">Enable GST</label>
+                                <input type="checkbox" class="purchaseEnableGST mt-1" ${item.enableGST ? 'checked' : ''}>
+                            `;
+                            document.getElementById('purchaseItems').appendChild(newItem);
+                            populateItemDropdown(newItem.querySelector('.purchaseItemSelect'));
+                            newItem.querySelector('.purchaseItemSelect').value = item.itemId;
+                        });
+                    }
+                }
+            }
+            openModal('addPurchaseModal');
+        }
+
+        function savePurchase() {
+            showSpinner('purchaseSaveSpinner');
+            const date = document.getElementById('purchaseDate').value;
+            const supplierId = parseInt(document.getElementById('purchaseSupplier').value);
+            const paymentStatus = document.getElementById('purchasePaymentStatus').value;
+            const paymentDate = document.getElementById('purchasePaymentDate').value;
+            const items = [];
+            let isValid = true;
+
+            const purchaseItems = document.querySelectorAll('.purchase-item');
+            purchaseItems.forEach((itemDiv, index) => {
+                const itemId = parseInt(itemDiv.querySelector('.purchaseItemSelect').value);
+                const quantity = parseInt(itemDiv.querySelector('.purchaseQuantity').value);
+                const pricePerUnit = parseFloat(itemDiv.querySelector('.purchasePrice').value);
+                const enableGST = itemDiv.querySelector('.purchaseEnableGST').checked;
+
+                if (editingPurchaseId) {
+                    if (!itemId || isNaN(quantity) || quantity <= 0 || isNaN(pricePerUnit) || pricePerUnit < 0) {
+                        showToast(`Item ${index + 1}: Invalid input`, 'error');
+                        isValid = false;
+                        return;
+                    }
+                } else {
+                    if (!itemId || isNaN(quantity) || quantity <= 0 || isNaN(pricePerUnit) || pricePerUnit < 0) {
+                        showToast(`Item ${index + 1}: Please fill in all required fields correctly`, 'error');
+                        isValid = false;
+                        return;
+                    }
+                }
+
+                const item = data.items.find(i => i.id === itemId);
+                if (!item) {
+                    showToast(`Item ${index + 1}: Invalid item selected`, 'error');
+                    isValid = false;
+                    return;
+                }
+
+                const gstPercentage = enableGST ? (item.gstPercentage || 0) : 0;
+                const basePrice = pricePerUnit * quantity;
+                const cgst = enableGST ? (basePrice * (gstPercentage / 2)) / 100 : 0;
+                const sgst = enableGST ? (basePrice * (gstPercentage / 2)) / 100 : 0;
+                const total = basePrice + cgst + sgst;
+                items.push({ itemId, quantity, pricePerUnit, enableGST, gstPercentage, cgst, sgst, total });
+            });
+
+            if (!date || isNaN(supplierId) || !paymentStatus || items.length === 0 || !isValid) {
+                showToast('Please fill in all required fields', 'error');
+                hideSpinner('purchaseSaveSpinner');
+                return;
+            }
+
+            const purchaseData = { date, supplierId, items, paymentStatus, paymentDate };
+            if (editingPurchaseId) {
+                const index = data.purchases.findIndex(p => p.id === editingPurchaseId);
+                if (index !== -1) {
+                    const oldPurchase = data.purchases[index];
+                    if (oldPurchase && oldPurchase.items && Array.isArray(oldPurchase.items)) {
+                        oldPurchase.items.forEach(item => {
+                            if (item.itemId && item.quantity) {
+                                updateStock(item.itemId, item.quantity, 'subtract');
+                            }
+                        });
+                    }
+                    data.purchases[index] = { id: editingPurchaseId, ...purchaseData };
+                }
+            } else {
+                data.purchases.push({ id: Date.now(), ...purchaseData });
+            }
+            items.forEach(item => updateStock(item.itemId, item.quantity, 'add'));
+            editingPurchaseId = null;
+            saveData();
+            hideSpinner('purchaseSaveSpinner');
+            closeModal('addPurchaseModal');
+        }
+
+        function deletePurchase(id) {
+            const purchase = data.purchases.find(p => p.id === id);
+            if (!purchase) {
+                showToast('Purchase not found', 'error');
+                return;
+            }
+            if (confirm(`Are you sure you want to delete purchase ID ${purchase.id}?`)) {
+                if (purchase.items && Array.isArray(purchase.items)) {
+                    purchase.items.forEach(item => {
+                        if (item.itemId && item.quantity) {
+                            updateStock(item.itemId, item.quantity, 'subtract');
+                        }
+                    });
+                }
+                data.purchases = data.purchases.filter(p => p.id !== id);
+                saveData();
+            }
+        }
+
+        function openDeliveryChallanModal(id = null) {
+            editingDeliveryChallanId = id;
+            document.getElementById('deliveryChallanModalTitle').textContent = id ? 'Edit Delivery Challan' : 'Add Delivery Challan';
+            populateDeliveryChallanDropdowns();
+            document.getElementById('deliveryChallanNo').value = '';
+            document.getElementById('deliveryChallanDate').value = '';
+            document.getElementById('deliveryChallanParty').value = '';
+            document.getElementById('deliveryChallanPaymentStatus').value = 'pending';
+            document.getElementById('deliveryChallanPaymentDate').value = '';
+            document.getElementById('deliveryChallanItems').innerHTML = `
+                <div class="delivery-challan-item space-y-2">
+                    <label class="block text-sm font-medium text-gray-700">Item</label>
+                    <select class="deliveryChallanItemSelect mt-1 block w-full p-2 border border-gray-300 rounded-md" required></select>
+                    <label class="block text-sm font-medium text-gray-700">Quantity</label>
+                    <input type="number" class="deliveryChallanQuantity mt-1 block w-full p-2 border border-gray-300 rounded-md" required min="1">
+                    <label class="block text-sm font-medium text-gray-700">Price (per unit)</label>
+                    <input type="number" class="deliveryChallanPrice mt-1 block w-full p-2 border border-gray-300 rounded-md" step="0.01" required min="0">
+                    <label class="block text-sm font-medium text-gray-700">Enable GST</label>
+                    <input type="checkbox" class="deliveryChallanEnableGST mt-1">
+                </div>
+            `;
+            populateItemDropdown(document.querySelector('.deliveryChallanItemSelect'));
+            if (id) {
+                const challan = data.deliveryChallans.find(d => d.id === id);
+                if (challan) {
+                    document.getElementById('deliveryChallanNo').value = challan.challanNo || '';
+                    document.getElementById('deliveryChallanDate').value = challan.date || '';
+                    document.getElementById('deliveryChallanParty').value = challan.partyId || '';
+                    document.getElementById('deliveryChallanPaymentStatus').value = challan.paymentStatus || 'pending';
+                    document.getElementById('deliveryChallanPaymentDate').value = challan.paymentDate || '';
+                    document.getElementById('deliveryChallanItems').innerHTML = '';
+                    if (challan.items && Array.isArray(challan.items)) {
+                        challan.items.forEach(item => {
+                            const newItem = document.createElement('div');
+                            newItem.classList.add('delivery-challan-item', 'space-y-2');
+                            newItem.innerHTML = `
+                                <label class="block text-sm font-medium text-gray-700">Item</label>
+                                <select class="deliveryChallanItemSelect mt-1 block w-full p-2 border border-gray-300 rounded-md" required></select>
+                                <label class="block text-sm font-medium text-gray-700">Quantity</label>
+                                <input type="number" class="deliveryChallanQuantity mt-1 block w-full p-2 border border-gray-300 rounded-md" value="${item.quantity}" required min="1">
+                                <label class="block text-sm font-medium text-gray-700">Price (per unit)</label>
+                                <input type="number" class="deliveryChallanPrice mt-1 block w-full p-2 border border-gray-300 rounded-md" step="0.01" value="${item.pricePerUnit}" required min="0">
+                                <label class="block text-sm font-medium text-gray-700">Enable GST</label>
+                                <input type="checkbox" class="deliveryChallanEnableGST mt-1" ${item.enableGST ? 'checked' : ''}>
+                            `;
+                            document.getElementById('deliveryChallanItems').appendChild(newItem);
+                            populateItemDropdown(newItem.querySelector('.deliveryChallanItemSelect'));
+                            newItem.querySelector('.deliveryChallanItemSelect').value = item.itemId;
+                        });
+                    }
+                }
+            }
+            openModal('addDeliveryChallanModal');
+        }
+
+        function saveDeliveryChallan() {
+            showSpinner('deliveryChallanSaveSpinner');
+            const challanNo = document.getElementById('deliveryChallanNo').value.trim();
+            const date = document.getElementById('deliveryChallanDate').value;
+            const partyId = parseInt(document.getElementById('deliveryChallanParty').value);
+            const paymentStatus = document.getElementById('deliveryChallanPaymentStatus').value;
+            const paymentDate = document.getElementById('deliveryChallanPaymentDate').value;
+            const items = [];
+            let isValid = true;
+
+            const deliveryChallanItems = document.querySelectorAll('.delivery-challan-item');
+            deliveryChallanItems.forEach((itemDiv, index) => {
+                const itemId = parseInt(itemDiv.querySelector('.deliveryChallanItemSelect').value);
+                const quantity = parseInt(itemDiv.querySelector('.deliveryChallanQuantity').value);
+                const pricePerUnit = parseFloat(itemDiv.querySelector('.deliveryChallanPrice').value);
+                const enableGST = itemDiv.querySelector('.deliveryChallanEnableGST').checked;
+
+                if (editingDeliveryChallanId) {
+                    if (!itemId || isNaN(quantity) || quantity <= 0 || isNaN(pricePerUnit) || pricePerUnit < 0) {
+                        showToast(`Item ${index + 1}: Invalid input`, 'error');
+                        isValid = false;
+                        return;
+                    }
+                } else {
+                    if (!itemId || isNaN(quantity) || quantity <= 0 || isNaN(pricePerUnit) || pricePerUnit < 0) {
+                        showToast(`Item ${index + 1}: Please fill in all required fields correctly`, 'error');
+                        isValid = false;
+                        return;
+                    }
+                }
+
+                const stockItem = data.stock.find(s => s.itemId === itemId);
+                if (!stockItem || stockItem.quantity < quantity) {
+                    showToast(`Item ${index + 1}: Insufficient stock`, 'error');
+                    isValid = false;
+                    return;
+                }
+
+                const item = data.items.find(i => i.id === itemId);
+                if (!item) {
+                    showToast(`Item ${index + 1}: Invalid item selected`, 'error');
+                    isValid = false;
+                    return;
+                }
+
+                const gstPercentage = enableGST ? (item.gstPercentage || 0) : 0;
+                const basePrice = pricePerUnit * quantity;
+                const cgst = enableGST ? (basePrice * (gstPercentage / 2)) / 100 : 0;
+                const sgst = enableGST ? (basePrice * (gstPercentage / 2)) / 100 : 0;
+                const total = basePrice + cgst + sgst;
+                items.push({ itemId, quantity, pricePerUnit, enableGST, gstPercentage, cgst, sgst, total });
+            });
+
+            if (!challanNo || !date || isNaN(partyId) || !paymentStatus || items.length === 0 || !isValid) {
+                showToast('Please fill in all required fields', 'error');
+                hideSpinner('deliveryChallanSaveSpinner');
+                return;
+            }
+
+            const challanData = { challanNo, date, partyId, items, paymentStatus, paymentDate };
+            if (editingDeliveryChallanId) {
+                const index = data.deliveryChallans.findIndex(d => d.id === editingDeliveryChallanId);
+                if (index !== -1) {
+                    const oldChallan = data.deliveryChallans[index];
+                    if (oldChallan && oldChallan.items && Array.isArray(oldChallan.items)) {
+                        oldChallan.items.forEach(item => {
+                            if (item.itemId && item.quantity) {
+                                updateStock(item.itemId, item.quantity, 'add');
+                            }
+                        });
+                    }
+                    data.deliveryChallans[index] = { id: editingDeliveryChallanId, ...challanData };
+                }
+            } else {
+                data.deliveryChallans.push({ id: Date.now(), ...challanData });
+            }
+            items.forEach(item => updateStock(item.itemId, item.quantity, 'subtract'));
+            editingDeliveryChallanId = null;
+            saveData();
+            hideSpinner('deliveryChallanSaveSpinner');
+            closeModal('addDeliveryChallanModal');
+        }
+
+        function deleteDeliveryChallan(id) {
+            const challan = data.deliveryChallans.find(d => d.id === id);
+            if (!challan) {
+                showToast('Delivery challan not found', 'error');
+                return;
+            }
+            if (confirm(`Are you sure you want to delete delivery challan ID ${challan.id}?`)) {
+                if (challan.items && Array.isArray(challan.items)) {
+                    challan.items.forEach(item => {
+                        if (item.itemId && item.quantity) {
+                            updateStock(item.itemId, item.quantity, 'add');
+                        }
+                    });
+                }
+                data.deliveryChallans = data.deliveryChallans.filter(d => d.id !== id);
+                saveData();
+            }
+        }
+
+        function openStockModal() {
+            populateDropdown('stockItem', data.items, 'id', 'name');
+            document.getElementById('stockQuantity').value = '';
+            openModal('addStockModal');
+        }
+
+        function addStock() {
+            showSpinner('stockSaveSpinner');
+            const itemId = parseInt(document.getElementById('stockItem').value);
+            const quantity = parseInt(document.getElementById('stockQuantity').value);
+            if (!itemId || isNaN(quantity) || quantity <= 0) {
+                showToast('Please select an item and enter a valid quantity', 'error');
+                hideSpinner('stockSaveSpinner');
+                return;
+            }
+            let stockItem = data.stock.find(s => s.itemId === itemId);
+            if (stockItem) {
+                stockItem.quantity += quantity;
+            } else {
+                data.stock.push({ itemId, quantity });
+            }
+            saveData();
+            hideSpinner('stockSaveSpinner');
+            closeModal('addStockModal');
+        }
+
+        function updateStock(itemId, quantity, action) {
+            let stockItem = data.stock.find(s => s.itemId === itemId);
+            if (!stockItem) {
+                stockItem = { itemId, quantity: 0 };
+                data.stock.push(stockItem);
+            }
+            stockItem.quantity += (action === 'add' ? quantity : -quantity);
+            if (stockItem.quantity <= 0) {
+                data.stock = data.stock.filter(s => s.itemId !== itemId);
+            }
+        }
+
+        function deleteContact(id) {
+            const contact = data.contacts.find(c => c.id === id);
+            if (!contact) {
+                showToast('Contact not found', 'error');
+                return;
+            }
+            if (data.purchases.some(p => p.supplierId === id) || data.deliveryChallans.some(d => d.partyId === id)) {
+                showToast('Cannot delete contact with associated transactions', 'error');
+                return;
+            }
+            if (confirm(`Are you sure you want to delete contact '${contact.name}'?`)) {
+                data.contacts = data.contacts.filter(c => c.id !== id);
+                saveData();
+            }
+        }
+
+        function deleteItem(id) {
+            const item = data.items.find(i => i.id === id);
+            if (!item) {
+                showToast('Item not found', 'error');
+                return;
+            }
+            if (data.purchases.some(p => p.items && p.items.some(it => it.itemId === id)) || data.deliveryChallans.some(d => d.items && d.items.some(it => it.itemId === id)) || data.stock.some(s => s.itemId === id)) {
+                showToast('Cannot delete item with associated transactions or stock', 'error');
+                return;
+            }
+            if (confirm(`Are you sure you want to delete item '${item.name}'?`)) {
+                data.items = data.items.filter(i => i.id !== id);
+                saveData();
+            }
+        }
+
+        function updateUI() {
+            document.getElementById('totalContacts').textContent = data.contacts.length;
+            document.getElementById('totalItems').textContent = data.items.length;
+            document.getElementById('totalPurchases').textContent = data.purchases.length;
+            document.getElementById('totalDeliveryChallans').textContent = data.deliveryChallans.length;
+
+            const contactsTable = document.getElementById('contactsTable');
+            contactsTable.innerHTML = data.contacts.map(contact => `
+                <tr class="hover:bg-gray-50">
+                    <td class="px-6 py-4 whitespace-nowrap">${contact.id}</td>
+                    <td class="px-6 py-4 whitespace-nowrap">${contact.name}</td>
+                    <td class="px-6 py-4 whitespace-nowrap">${contact.type}</td>
+                    <td class="px-6 py-4 whitespace-nowrap">${contact.contact || ''}</td>
+                    <td class="px-6 py-4 whitespace-nowrap">${contact.address || ''}</td>
+                    <td class="px-6 py-4 whitespace-nowrap">${contact.gst || ''}</td>
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        <button class="text-yellow-600 hover:text-yellow-800 mr-2" onclick="openContactModal(${contact.id})">Edit</button>
+                        <button class="text-red-600 hover:text-red-800" onclick="deleteContact(${contact.id})">Delete</button>
+                    </td>
+                </tr>
+            `).join('');
+
+            const itemsTable = document.getElementById('itemsTable');
+            itemsTable.innerHTML = data.items.map(item => `
+                <tr class="hover:bg-gray-50">
+                    <td class="px-6 py-4 whitespace-nowrap">${item.id}</td>
+                    <td class="px-6 py-4 whitespace-nowrap">${item.name}</td>
+                    <td class="px-6 py-4 whitespace-nowrap">${item.unit}</td>
+                    <td class="px-6 py-4 whitespace-nowrap">${item.hsnCode || ''}</td>
+                    <td class="px-6 py-4 whitespace-nowrap">${item.gstPercentage || ''}</td>
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        <button class="text-yellow-600 hover:text-yellow-800 mr-2" onclick="openItemModal(${item.id})">Edit</button>
+                        <button class="text-red-600 hover:text-red-800" onclick="deleteItem(${item.id})">Delete</button>
+                    </td>
+                </tr>
+            `).join('');
+
+            const purchasesTable = document.getElementById('purchasesTable');
+            purchasesTable.innerHTML = data.purchases.map(purchase => {
+                const supplier = data.contacts.find(c => c.id === purchase.supplierId);
+                let itemsHtml = '';
+                if (purchase.items && Array.isArray(purchase.items)) {
+                    purchase.items.forEach(item => {
+                        const itemData = data.items.find(i => i.id === item.itemId);
+                        itemsHtml += `
+                            <div>${itemData ? itemData.name : 'N/A'} - Qty: ${item.quantity}, Price: ${item.pricePerUnit.toFixed(2)}, Total: ${item.total.toFixed(2)}${item.enableGST ? ` (GST: ${item.gstPercentage}%, CGST: ${item.cgst.toFixed(2)}, SGST: ${item.sgst.toFixed(2)})` : ''}</div>
+                        `;
+                    });
+                } else {
+                    itemsHtml = 'No items';
+                }
+                return `
+                    <tr class="hover:bg-gray-50">
+                        <td class="px-6 py-4 whitespace-nowrap">${purchase.id}</td>
+                        <td class="px-6 py-4 whitespace-nowrap">${purchase.date}</td>
+                        <td class="px-6 py-4 whitespace-nowrap">${supplier ? supplier.name : 'N/A'}</td>
+                        <td class="px-6 py-4 whitespace-nowrap">${itemsHtml}</td>
+                        <td class="px-6 py-4 whitespace-nowrap">${purchase.paymentStatus}</td>
+                        <td class="px-6 py-4 whitespace-nowrap">${purchase.paymentDate || ''}</td>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            <button class="text-yellow-600 hover:text-yellow-800 mr-2" onclick="openPurchaseModal(${purchase.id})">Edit</button>
+                            <button class="text-red-600 hover:text-red-800" onclick="deletePurchase(${purchase.id})">Delete</button>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+
+            const deliveryChallansTable = document.getElementById('deliveryChallansTable');
+            deliveryChallansTable.innerHTML = data.deliveryChallans.map(challan => {
+                const party = data.contacts.find(c => c.id === challan.partyId);
+                let itemsHtml = '';
+                if (challan.items && Array.isArray(challan.items)) {
+                    challan.items.forEach(item => {
+                        const itemData = data.items.find(i => i.id === item.itemId);
+                        itemsHtml += `
+                            <div>${itemData ? itemData.name : 'N/A'} - Qty: ${item.quantity}, Price: ${item.pricePerUnit.toFixed(2)}, Total: ${item.total.toFixed(2)}${item.enableGST ? ` (GST: ${item.gstPercentage}%, CGST: ${item.cgst.toFixed(2)}, SGST: ${item.sgst.toFixed(2)})` : ''}</div>
+                        `;
+                    });
+                } else {
+                    itemsHtml = 'No items';
+                }
+                return `
+                    <tr class="hover:bg-gray-50">
+                        <td class="px-6 py-4 whitespace-nowrap">${challan.id}</td>
+                        <td class="px-6 py-4 whitespace-nowrap">${challan.challanNo || 'N/A'}</td>
+                        <td class="px-6 py-4 whitespace-nowrap">${challan.date}</td>
+                        <td class="px-6 py-4 whitespace-nowrap">${party ? party.name : 'N/A'}</td>
+                        <td class="px-6 py-4 whitespace-nowrap">${itemsHtml}</td>
+                        <td class="px-6 py-4 whitespace-nowrap">${challan.paymentStatus}</td>
+                        <td class="px-6 py-4 whitespace-nowrap">${challan.paymentDate || ''}</td>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            <button class="text-yellow-600 hover:text-yellow-800 mr-2" onclick="openDeliveryChallanModal(${challan.id})">Edit</button>
+                            <button class="text-red-600 hover:text-red-800" onclick="deleteDeliveryChallan(${challan.id})">Delete</button>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+
+            const stockTable = document.getElementById('stockTable');
+            stockTable.innerHTML = data.stock.map(stock => {
+                const item = data.items.find(i => i.id === stock.itemId);
+                return item ? `
+                    <tr class="hover:bg-gray-50">
+                        <td class="px-6 py-4 whitespace-nowrap">${item.name}</td>
+                        <td class="px-6 py-4 whitespace-nowrap">${stock.quantity}</td>
+                        <td class="px-6 py-4 whitespace-nowrap">${item.unit}</td>
+                    </tr>
+                ` : '';
+            }).join('');
+        }
+
+        function populatePurchaseDropdowns() {
+            populateDropdown('purchaseSupplier', data.contacts.filter(c => c.type === 'supplier'), 'id', 'name');
+            document.querySelectorAll('.purchaseItemSelect').forEach(select => populateItemDropdown(select));
+        }
+
+        function populateDeliveryChallanDropdowns() {
+            populateDropdown('deliveryChallanParty', data.contacts.filter(c => c.type === 'party'), 'id', 'name');
+            document.querySelectorAll('.deliveryChallanItemSelect').forEach(select => populateItemDropdown(select));
+        }
+
+        showSection('dashboard');
+        updateUI();
+        if (localStorage.getItem('darkMode') === 'true') {
+            document.body.classList.add('dark-mode');
+        }
+    </script>
+</body>
+</html>
