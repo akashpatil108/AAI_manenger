@@ -1,0 +1,1863 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Arihant Agro Industries</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <!-- Use the full version if needed, but slim is often sufficient -->
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <style>
+        .section { display: none; }
+        .section.active { display: block; }
+        .modal { display: none; }
+        .modal.active { display: flex; }
+        .modal-content { max-height: 80vh; overflow-y: auto; }
+        .table-container { max-height: 70vh; overflow-y: auto; }
+        .sidebar { transition: width 0.3s; }
+        .sidebar:hover { width: 16rem; }
+        .toast { position: fixed; bottom: 20px; right: 20px; background: #333; color: white; padding: 10px 20px; border-radius: 5px; display: none; z-index: 1000; } /* Added z-index */
+        .toast.success { background: #10B981; }
+        .toast.error { background: #EF4444; }
+        /* Dark Mode Styles (already present, ensuring they are here) */
+        .dark-mode { background-color: #1F2937; color: #F9FAFB; }
+        .dark-mode .bg-white { background-color: #374151; }
+        .dark-mode .bg-gray-50 { background-color: #4B5563; }
+        .dark-mode .text-gray-600 { color: #D1D5DB; }
+        .dark-mode .bg-indigo-900 { background-color: #4C1D95; }
+        .dark-mode .hover\:bg-indigo-700:hover { background-color: #5B21B6; }
+        .dark-mode .border-gray-300 { border-color: #4B5563; }
+        .dark-mode input, .dark-mode select, .dark-mode textarea { background-color: #374151; color: #F9FAFB; }
+        .dark-mode .modal-content { background-color: #1F2937; }
+        .dark-mode .text-gray-700 { color: #D1D5DB; }
+        .dark-mode .text-gray-500 { color: #9CA3AF; }
+        .dark-mode .hover\:text-gray-700:hover { color: #D1D5DB; }
+
+        .spinner { display: none; width: 16px; height: 16px; border: 2px solid #fff; border-top: 2px solid transparent; border-radius: 50%; animation: spin 1s linear infinite; margin-left: 8px; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        .input-error { border-color: #EF4444; }
+        .error-message { color: #EF4444; font-size: 0.75rem; display: none; }
+        @media (max-width: 768px) {
+            .sidebar { width: 4rem; }
+            .sidebar:hover { width: 12rem; }
+            .modal-content { width: 90%; }
+            .table-container { overflow-x: auto; }
+        }
+    </style>
+</head>
+<body class="bg-gray-100 font-sans">
+    <div class="flex h-screen">
+        <div class="fixed inset-y-0 left-0 w-16 bg-indigo-900 text-white sidebar flex flex-col items-center py-4 space-y-4">
+            <div class="text-2xl font-bold mb-10">AAI</div>
+            <button class="py-2 w-full text-center hover:bg-indigo-700" onclick="showSection('dashboard')" title="Dashboard" aria-label="Dashboard">🏠</button>
+            <button class="py-2 w-full text-center hover:bg-indigo-700" onclick="showSection('contacts')" title="Contacts" aria-label="Contacts">👥</button>
+            <button class="py-2 w-full text-center hover:bg-indigo-700" onclick="showSection('items')" title="Items" aria-label="Items">🛍️</button>
+            <button class="py-2 w-full text-center hover:bg-indigo-700" onclick="showSection('purchases')" title="Purchases" aria-label="Purchases">📥</button>
+            <button class="py-2 w-full text-center hover:bg-indigo-700" onclick="showSection('deliveryChallans')" title="Delivery Challans" aria-label="Delivery Challans">📤</button>
+            <button class="py-2 w-full text-center hover:bg-indigo-700" onclick="showSection('stock')" title="Stock" aria-label="Stock">📦</button>
+            <button class="py-2 w-full text-center hover:bg-indigo-700" onclick="toggleDarkMode()" title="Toggle Dark Mode" aria-label="Toggle Dark Mode">🌙</button>
+            <button class="py-2 w-full text-center hover:bg-indigo-700 text-sm" onclick="clearAllData()" title="Clear All Data" aria-label="Clear All Data">🗑️</button>
+        </div>
+        <div class="ml-16 p-6 flex-1 overflow-auto">
+            <div id="dashboard" class="section active">
+                <h1 class="text-3xl font-bold text-indigo-900 mb-6">Dashboard</h1>
+                <p>Please upload the Excel file to load/import data (this will overwrite existing data):</p>
+                <input type="file" id="excelFileInput" accept=".xlsx" onchange="loadExcelFile(event)" class="mb-4" />
+                <button class="bg-indigo-600 text-white px-4 py-2 rounded hover:bg-indigo-700" onclick="saveToExcel()">Save to Excel</button>
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mt-6">
+                    <div class="bg-white p-4 rounded-lg shadow-md">
+                        <p class="text-gray-600">Total Contacts</p>
+                        <p class="text-2xl font-semibold" id="totalContacts">0</p>
+                    </div>
+                    <div class="bg-white p-4 rounded-lg shadow-md">
+                        <p class="text-gray-600">Total Items</p>
+                        <p class="text-2xl font-semibold" id="totalItems">0</p>
+                    </div>
+                    <div class="bg-white p-4 rounded-lg shadow-md">
+                        <p class="text-gray-600">Total Purchases</p>
+                        <p class="text-2xl font-semibold" id="totalPurchases">0</p>
+                    </div>
+                    <div class="bg-white p-4 rounded-lg shadow-md">
+                        <p class="text-gray-600">Total Delivery Challans</p>
+                        <p class="text-2xl font-semibold" id="totalDeliveryChallans">0</p>
+                    </div>
+                </div>
+                 <div class="mt-6">
+                    <h2 class="text-2xl font-bold text-indigo-900 mb-4">Note</h2>
+                    <p class="text-gray-700">Data is automatically saved to your browser's local storage. Uploading an Excel file will overwrite the data in local storage. Clicking "Save to Excel" allows you to download a backup file.</p>
+                </div>
+            </div>
+            <div id="contacts" class="section">
+                <div class="flex justify-between items-center mb-6">
+                    <h1 class="text-3xl font-bold text-indigo-900">Contacts</h1>
+                    <div>
+                        <button class="bg-indigo-600 text-white px-4 py-2 rounded hover:bg-indigo-700 mr-2" onclick="exportToCSV('contactsTable', 'contacts.csv')">Export to CSV</button>
+                        <button class="bg-indigo-600 text-white px-4 py-2 rounded hover:bg-indigo-700" onclick="openContactModal()">Add Contact</button>
+                    </div>
+                </div>
+                <input type="text" id="contactsSearch" class="mb-4 p-2 border border-gray-300 rounded-md w-full" placeholder="Search contacts..." onkeyup="filterTable('contactsTable', this.value)">
+                <div class="table-container bg-white rounded-lg shadow-md overflow-x-auto">
+                    <table class="min-w-full divide-y divide-gray-200">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer" onclick="sortTable('contactsTable', 0)">ID</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer" onclick="sortTable('contactsTable', 1)">Name</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer" onclick="sortTable('contactsTable', 2)">Type</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Contact</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Address</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">GST No.</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="contactsTable" class="bg-white divide-y divide-gray-200"></tbody>
+                    </table>
+                </div>
+            </div>
+            <div id="items" class="section">
+                <div class="flex justify-between items-center mb-6">
+                    <h1 class="text-3xl font-bold text-indigo-900">Items</h1>
+                    <div>
+                        <button class="bg-indigo-600 text-white px-4 py-2 rounded hover:bg-indigo-700 mr-2" onclick="exportToCSV('itemsTable', 'items.csv')">Export to CSV</button>
+                        <button class="bg-indigo-600 text-white px-4 py-2 rounded hover:bg-indigo-700" onclick="openItemModal()">Add Item</button>
+                    </div>
+                </div>
+                <input type="text" id="itemsSearch" class="mb-4 p-2 border border-gray-300 rounded-md w-full" placeholder="Search items..." onkeyup="filterTable('itemsTable', this.value)">
+                <div class="table-container bg-white rounded-lg shadow-md overflow-x-auto">
+                    <table class="min-w-full divide-y divide-gray-200">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer" onclick="sortTable('itemsTable', 0)">ID</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer" onclick="sortTable('itemsTable', 1)">Name</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Unit</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">HSN Code</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">GST %</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="itemsTable" class="bg-white divide-y divide-gray-200"></tbody>
+                    </table>
+                </div>
+            </div>
+            <div id="purchases" class="section">
+                <div class="flex justify-between items-center mb-6">
+                    <h1 class="text-3xl font-bold text-indigo-900">Purchases</h1>
+                    <button class="bg-indigo-600 text-white px-4 py-2 rounded hover:bg-indigo-700" onclick="openPurchaseModal()">Add Purchase</button>
+                </div>
+                <input type="text" id="purchasesSearch" class="mb-4 p-2 border border-gray-300 rounded-md w-full" placeholder="Search purchases..." onkeyup="filterTable('purchasesTable', this.value)">
+                <div class="table-container bg-white rounded-lg shadow-md overflow-x-auto">
+                    <table class="min-w-full divide-y divide-gray-200">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer" onclick="sortTable('purchasesTable', 0)">ID</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer" onclick="sortTable('purchasesTable', 1)">Date</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Supplier</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Items</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Payment Status</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Payment Date</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="purchasesTable" class="bg-white divide-y divide-gray-200"></tbody>
+                    </table>
+                </div>
+            </div>
+            <div id="deliveryChallans" class="section">
+                <div class="flex justify-between items-center mb-6">
+                    <h1 class="text-3xl font-bold text-indigo-900">Delivery Challans</h1>
+                    <button class="bg-indigo-600 text-white px-4 py-2 rounded hover:bg-indigo-700" onclick="openDeliveryChallanModal()">Add Delivery Challan</button>
+                </div>
+                <input type="text" id="deliveryChallansSearch" class="mb-4 p-2 border border-gray-300 rounded-md w-full" placeholder="Search delivery challans..." onkeyup="filterTable('deliveryChallansTable', this.value)">
+                <div class="table-container bg-white rounded-lg shadow-md overflow-x-auto">
+                    <table class="min-w-full divide-y divide-gray-200">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer" onclick="sortTable('deliveryChallansTable', 0)">ID</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer" onclick="sortTable('deliveryChallansTable', 1)">Challan No.</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer" onclick="sortTable('deliveryChallansTable', 2)">Date</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Party</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Items</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Payment Status</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Payment Date</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="deliveryChallansTable" class="bg-white divide-y divide-gray-200"></tbody>
+                    </table>
+                </div>
+            </div>
+            <div id="stock" class="section">
+                <div class="flex justify-between items-center mb-6">
+                    <h1 class="text-3xl font-bold text-indigo-900">Stock</h1>
+                    <!-- Removing "Add Stock" button from here as stock is managed via Purchases/Delivery Challans -->
+                    <!-- <button class="bg-indigo-600 text-white px-4 py-2 rounded hover:bg-indigo-700" onclick="openStockModal()">Add Stock</button> -->
+                </div>
+                 <p class="mb-4 text-gray-700">Stock is automatically updated based on Purchases (increase) and Delivery Challans (decrease).</p>
+                <div class="table-container bg-white rounded-lg shadow-md overflow-x-auto">
+                    <table class="min-w-full divide-y divide-gray-200">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer" onclick="sortTable('stockTable', 0)">Item</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Quantity</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Unit</th>
+                            </tr>
+                        </thead>
+                        <tbody id="stockTable" class="bg-white divide-y divide-gray-200"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div id="addContactModal" class="modal fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center">
+        <div class="modal-content bg-white p-6 rounded-lg shadow-xl w-full max-w-md">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-xl font-bold" id="contactModalTitle">Add Contact</h3>
+                <button class="text-gray-500 hover:text-gray-700" onclick="closeModal('addContactModal')">✕</button>
+            </div>
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Type</label>
+                    <select id="contactType" class="mt-1 block w-full p-2 border border-gray-300 rounded-md" required>
+                        <option value="supplier">Supplier</option>
+                        <option value="party">Party</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Name</label>
+                    <input type="text" id="contactName" class="mt-1 block w-full p-2 border border-gray-300 rounded-md" required>
+                    <span class="error-message" id="contactNameError">Name is required</span>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Contact</label>
+                    <input type="text" id="contactContact" class="mt-1 block w-full p-2 border border-gray-300 rounded-md" pattern="[0-9]{10}" title="Enter a 10-digit contact number" oninput="validateContact(this)">
+                    <span class="error-message" id="contactContactError">Must be a 10-digit number</span>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Address</label>
+                    <textarea id="contactAddress" class="mt-1 block w-full p-2 border border-gray-300 rounded-md"></textarea>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">GST No.</label>
+                    <input type="text" id="contactGST" class="mt-1 block w-full p-2 border border-gray-300 rounded-md" pattern="[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[0-9A-Z]{1}Z[0-9A-Z]{1}" title="Enter a valid GST number (e.g., 22ABCDE1234F1Z5)" oninput="validateGST(this)">
+                    <span class="error-message" id="contactGSTError">Invalid GST format</span>
+                </div>
+            </div>
+            <div class="mt-6 flex justify-end space-x-3">
+                <button class="bg-gray-300 text-gray-700 px-4 py-2 rounded hover:bg-gray-400" onclick="closeModal('addContactModal')">Cancel</button>
+                <button class="bg-indigo-600 text-white px-4 py-2 rounded hover:bg-indigo-700 flex items-center" onclick="saveContact()">
+                    <span>Save</span>
+                    <span class="spinner" id="contactSaveSpinner"></span>
+                </button>
+            </div>
+        </div>
+    </div>
+    <div id="addItemModal" class="modal fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center">
+        <div class="modal-content bg-white p-6 rounded-lg shadow-xl w-full max-w-md">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-xl font-bold" id="itemModalTitle">Add Item</h3>
+                <button class="text-gray-500 hover:text-gray-700" onclick="closeModal('addItemModal')">✕</button>
+            </div>
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Name</label>
+                    <input type="text" id="itemName" class="mt-1 block w-full p-2 border border-gray-300 rounded-md" required>
+                    <span class="error-message" id="itemNameError">Name is required</span>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Unit</label>
+                    <input type="text" id="itemUnit" class="mt-1 block w-full p-2 border border-gray-300 rounded-md" required>
+                    <span class="error-message" id="itemUnitError">Unit is required</span>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">HSN Code</label>
+                    <input type="text" id="itemHSN" class="mt-1 block w-full p-2 border border-gray-300 rounded-md">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">GST %</label>
+                    <input type="number" id="itemGST" class="mt-1 block w-full p-2 border border-gray-300 rounded-md" step="0.01" min="0" oninput="validateGSTPercentage(this)">
+                    <span class="error-message" id="itemGSTError">Cannot be negative</span>
+                </div>
+            </div>
+            <div class="mt-6 flex justify-end space-x-3">
+                <button class="bg-gray-300 text-gray-700 px-4 py-2 rounded hover:bg-gray-400" onclick="closeModal('addItemModal')">Cancel</button>
+                <button class="bg-indigo-600 text-white px-4 py-2 rounded hover:bg-indigo-700 flex items-center" onclick="saveItem()">
+                    <span>Save</span>
+                    <span class="spinner" id="itemSaveSpinner"></span>
+                </button>
+            </div>
+        </div>
+    </div>
+    <div id="addPurchaseModal" class="modal fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center">
+        <div class="modal-content bg-white p-6 rounded-lg shadow-xl w-full max-w-md">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-xl font-bold" id="purchaseModalTitle">Add Purchase</h3>
+                <button class="text-gray-500 hover:text-gray-700" onclick="closeModal('addPurchaseModal')">✕</button>
+            </div>
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Date</label>
+                    <input type="date" id="purchaseDate" class="mt-1 block w-full p-2 border border-gray-300 rounded-md" required>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Supplier</label>
+                    <select id="purchaseSupplier" class="mt-1 block w-full p-2 border border-gray-300 rounded-md" required></select>
+                </div>
+                <div id="purchaseItems">
+                    <div class="purchase-item space-y-2 border p-3 rounded mt-2"> <!-- Added border/padding -->
+                        <label class="block text-sm font-medium text-gray-700">Item</label>
+                        <select class="purchaseItemSelect mt-1 block w-full p-2 border border-gray-300 rounded-md" required></select>
+                        <label class="block text-sm font-medium text-gray-700">Quantity</label>
+                        <input type="number" class="purchaseQuantity mt-1 block w-full p-2 border border-gray-300 rounded-md" required min="1">
+                        <label class="block text-sm font-medium text-gray-700">Price (per unit)</label>
+                        <input type="number" class="purchasePrice mt-1 block w-full p-2 border border-gray-300 rounded-md" step="0.01" required min="0">
+                        <div class="flex items-center"> <!-- Added flex for checkbox+label alignment -->
+                            <input type="checkbox" class="purchaseEnableGST mt-1 mr-2">
+                            <label class="text-sm font-medium text-gray-700">Enable GST</label>
+                        </div>
+                         <button class="text-red-600 hover:text-red-800 text-sm mt-2" onclick="removePurchaseItem(this)">Remove Item</button> <!-- Added remove button -->
+                    </div>
+                </div>
+                <button class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 mt-4" onclick="addPurchaseItem()">Add Another Item</button> <!-- Changed text -->
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Payment Status</label>
+                    <select id="purchasePaymentStatus" class="mt-1 block w-full p-2 border border-gray-300 rounded-md" required>
+                        <option value="pending">Pending</option>
+                        <option value="paid">Paid</option>
+                    </select>
+                </div>
+                <div id="purchasePaymentDateContainer" class="hidden"> <!-- Container to show/hide -->
+                    <label class="block text-sm font-medium text-gray-700">Payment Date</label>
+                    <input type="date" id="purchasePaymentDate" class="mt-1 block w-full p-2 border border-gray-300 rounded-md">
+                </div>
+            </div>
+            <div class="mt-6 flex justify-end space-x-3">
+                <button class="bg-gray-300 text-gray-700 px-4 py-2 rounded hover:bg-gray-400" onclick="closeModal('addPurchaseModal')">Cancel</button>
+                <button class="bg-indigo-600 text-white px-4 py-2 rounded hover:bg-indigo-700 flex items-center" onclick="savePurchase()">
+                    <span>Save</span>
+                    <span class="spinner" id="purchaseSaveSpinner"></span>
+                </button>
+            </div>
+        </div>
+    </div>
+    <div id="addDeliveryChallanModal" class="modal fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center">
+        <div class="modal-content bg-white p-6 rounded-lg shadow-xl w-full max-w-md">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-xl font-bold" id="deliveryChallanModalTitle">Add Delivery Challan</h3>
+                <button class="text-gray-500 hover:text-gray-700" onclick="closeModal('addDeliveryChallanModal')">✕</button>
+            </div>
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Challan No.</label>
+                    <input type="text" id="deliveryChallanNo" class="mt-1 block w-full p-2 border border-gray-300 rounded-md" required>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Date</label>
+                    <input type="date" id="deliveryChallanDate" class="mt-1 block w-full p-2 border border-gray-300 rounded-md" required>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Party</label>
+                    <select id="deliveryChallanParty" class="mt-1 block w-full p-2 border border-gray-300 rounded-md" required></select>
+                </div>
+                <div id="deliveryChallanItems">
+                    <div class="delivery-challan-item space-y-2 border p-3 rounded mt-2"> <!-- Added border/padding -->
+                        <label class="block text-sm font-medium text-gray-700">Item</label>
+                        <select class="deliveryChallanItemSelect mt-1 block w-full p-2 border border-gray-300 rounded-md" required></select>
+                        <label class="block text-sm font-medium text-gray-700">Quantity</label>
+                        <input type="number" class="deliveryChallanQuantity mt-1 block w-full p-2 border border-gray-300 rounded-md" required min="1">
+                        <label class="block text-sm font-medium text-gray-700">Price (per unit)</label>
+                        <input type="number" class="deliveryChallanPrice mt-1 block w-full p-2 border border-gray-300 rounded-md" step="0.01" required min="0">
+                         <div class="flex items-center"> <!-- Added flex for checkbox+label alignment -->
+                            <input type="checkbox" class="deliveryChallanEnableGST mt-1 mr-2">
+                            <label class="text-sm font-medium text-gray-700">Enable GST</label>
+                        </div>
+                        <button class="text-red-600 hover:text-red-800 text-sm mt-2" onclick="removeDeliveryChallanItem(this)">Remove Item</button> <!-- Added remove button -->
+                    </div>
+                </div>
+                <button class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 mt-4" onclick="addDeliveryChallanItem()">Add Another Item</button> <!-- Changed text -->
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Payment Status</label>
+                    <select id="deliveryChallanPaymentStatus" class="mt-1 block w-full p-2 border border-gray-300 rounded-md" required>
+                        <option value="pending">Pending</option>
+                        <option value="paid">Paid</option>
+                    </select>
+                </div>
+                 <div id="deliveryChallanPaymentDateContainer" class="hidden"> <!-- Container to show/hide -->
+                    <label class="block text-sm font-medium text-gray-700">Payment Date</label>
+                    <input type="date" id="deliveryChallanPaymentDate" class="mt-1 block w-full p-2 border border-gray-300 rounded-md">
+                </div>
+            </div>
+            <div class="mt-6 flex justify-end space-x-3">
+                <button class="bg-gray-300 text-gray-700 px-4 py-2 rounded hover:bg-gray-400" onclick="closeModal('addDeliveryChallanModal')">Cancel</button>
+                <button class="bg-indigo-600 text-white px-4 py-2 rounded hover:bg-indigo-700 flex items-center" onclick="saveDeliveryChallan()">
+                    <span>Save</span>
+                    <span class="spinner" id="deliveryChallanSaveSpinner"></span>
+                </button>
+            </div>
+        </div>
+    </div>
+    <!-- Removed Add Stock Modal as stock is derived -->
+    <!-- <div id="addStockModal" class="modal fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center">
+        <div class="modal-content bg-white p-6 rounded-lg shadow-xl w-full max-w-md">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-xl font-bold">Add Stock</h3>
+                <button class="text-gray-500 hover:text-gray-700" onclick="closeModal('addStockModal')">✕</button>
+            </div>
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Item</label>
+                    <select id="stockItem" class="mt-1 block w-full p-2 border border-gray-300 rounded-md" required></select>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Quantity</label>
+                    <input type="number" id="stockQuantity" class="mt-1 block w-full p-2 border border-gray-300 rounded-md" required min="1">
+                </div>
+            </div>
+            <div class="mt-6 flex justify-end space-x-3">
+                <button class="bg-gray-300 text-gray-700 px-4 py-2 rounded hover:bg-gray-400" onclick="closeModal('addStockModal')">Cancel</button>
+                <button class="bg-indigo-600 text-white px-4 py-2 rounded hover:bg-indigo-700 flex items-center" onclick="addStock()">
+                    <span>Save</span>
+                    <span class="spinner" id="stockSaveSpinner"></span>
+                </button>
+            </div>
+        </div>
+    </div> -->
+    <div id="toast" class="toast"></div>
+    <script>
+        // gk_ variables seem to be for the old file loading method, keeping them but focusing on the 'data' object
+        var gk_isXlsx = false;
+        var gk_xlsxFileLookup = {};
+        var gk_fileData = {}; // This is where the old file content was stored
+        function filledCell(cell) {
+          return cell !== '' && cell != null;
+        }
+        // This function is likely not needed anymore if using loadExcelFile directly
+        // and managing data in the 'data' object, but keeping it as it was in the original snippet
+        function loadFileData(filename) {
+            if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
+                try {
+                    var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
+                    var firstSheetName = workbook.SheetNames[0];
+                    var worksheet = workbook.Sheets[firstSheetName];
+                    var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
+                    var filteredData = jsonData.filter(row => row.some(filledCell));
+                    var headerRowIndex = filteredData.findIndex((row, index) =>
+                      row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
+                    );
+                    if (headerRowIndex === -1 || headerRowIndex > 25) {
+                      headerRowIndex = 0;
+                    }
+                    var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex));
+                    csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
+                    return csv;
+                } catch (e) {
+                    console.error(e);
+                    showToast('Error processing Excel sheet.', 'error');
+                    return "";
+                }
+            }
+            // Assuming gk_fileData[filename] might hold non-Excel content too
+            return gk_fileData[filename] || "";
+        }
+        // --- Main data object and Local Storage functions ---
+        let data = {
+            contacts: [],
+            items: [],
+            purchases: [],
+            deliveryChallans: [],
+            stock: [] // Stock will be calculated, not directly edited
+        };
+        const localStorageKey = 'aaiAppData'; // Unique key for your app's data
+        // Function to load data from Local Storage
+        function loadData() {
+            const savedData = localStorage.getItem(localStorageKey);
+            if (savedData) {
+                try {
+                    const parsedData = JSON.parse(savedData);
+                    // --- Crucial: Convert relevant values back to numbers after parsing ---
+                    data.contacts = (parsedData.contacts || []).map(c => ({
+                        id: Number(c.id),
+                        type: c.type,
+                        name: c.name,
+                        contact: c.contact,
+                        address: c.address,
+                        gst: c.gst
+                    }));
+                    data.items = (parsedData.items || []).map(i => ({
+                        id: Number(i.id),
+                        name: i.name,
+                        unit: i.unit,
+                        hsnCode: i.hsnCode,
+                        gstPercentage: Number(i.gstPercentage) // Ensure this is a number
+                    }));
+                     data.purchases = (parsedData.purchases || []).map(p => ({
+                        id: Number(p.id),
+                        date: p.date,
+                        supplierId: Number(p.supplierId),
+                        items: (p.items || []).map(item => ({
+                            itemId: Number(item.itemId),
+                            quantity: Number(item.quantity),
+                            pricePerUnit: Number(item.pricePerUnit),
+                            enableGST: Boolean(item.enableGST), // Ensure boolean
+                            gstPercentage: Number(item.gstPercentage),
+                            cgst: Number(item.cgst),
+                            sgst: Number(item.sgst),
+                            total: Number(item.total)
+                        })),
+                        paymentStatus: p.paymentStatus,
+                        paymentDate: p.paymentDate
+                    }));
+                    data.deliveryChallans = (parsedData.deliveryChallans || []).map(d => ({
+                        id: Number(d.id),
+                        challanNo: d.challanNo,
+                        date: d.date,
+                        partyId: Number(d.partyId),
+                         items: (d.items || []).map(item => ({
+                            itemId: Number(item.itemId),
+                            quantity: Number(item.quantity),
+                            pricePerUnit: Number(item.pricePerUnit),
+                            enableGST: Boolean(item.enableGST), // Ensure boolean
+                             gstPercentage: Number(item.gstPercentage),
+                            cgst: Number(item.cgst),
+                            sgst: Number(item.sgst),
+                            total: Number(item.total)
+                        })),
+                        paymentStatus: d.paymentStatus,
+                        paymentDate: d.paymentDate
+                    }));
+                     // Stock will be recalculated from purchases and challans
+                     data.stock = calculateStock();
+                    console.log('Data loaded from Local Storage');
+                     showToast('Data loaded from browser storage', 'success');
+                } catch (e) {
+                    console.error('Failed to parse data from Local Storage:', e);
+                    showToast('Error loading data from browser storage. Data reset.', 'error');
+                    // Clear potentially corrupt data and start fresh
+                    localStorage.removeItem(localStorageKey);
+                    data = { contacts: [], items: [], purchases: [], deliveryChallans: [], stock: [] };
+                }
+            } else {
+                console.log('No data found in Local Storage. Starting fresh.');
+                data = { contacts: [], items: [], purchases: [], deliveryChallans: [], stock: [] }; // Ensure data is initialized if LS is empty
+            }
+             updateUI(); // Update UI after loading data
+        }
+        // Function to save data to Local Storage
+        function saveData() {
+             // Recalculate stock before saving
+             data.stock = calculateStock();
+            try {
+                localStorage.setItem(localStorageKey, JSON.stringify(data));
+                console.log('Data saved to Local Storage');
+                // showToast('Data saved', 'success'); // Optional: Can be noisy
+            } catch (e) {
+                 console.error('Failed to save data to Local Storage:', e);
+                 showToast('Failed to save data', 'error');
+            }
+             updateUI(); // Always update UI after saving
+        }
+        // --- Excel Import/Export ---
+        function loadExcelFile(event) {
+            const file = event.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    const fileData = e.target.result;
+                    try {
+                        const workbook = XLSX.read(fileData, { type: 'binary' });
+                        parseWorkbook(workbook);
+                        showToast('Excel file loaded and data imported successfully', 'success');
+                         // Clear the file input after loading
+                        event.target.value = '';
+                    } catch (e) {
+                         console.error('Error reading Excel file:', e);
+                         showToast('Error reading Excel file. Please check the format.', 'error');
+                         event.target.value = ''; // Clear the file input on error
+                    }
+                };
+                reader.readAsBinaryString(file);
+            } else {
+                showToast('No file selected', 'error');
+            }
+        }
+        function parseWorkbook(workbook) {
+            // Read sheets and convert to structured data, handling potential missing sheets
+            const contactsSheet = workbook.Sheets['contacts'];
+            data.contacts = contactsSheet ? XLSX.utils.sheet_to_json(contactsSheet).map(c => ({
+                id: Number(c.id),
+                type: String(c.type || '').toLowerCase(), // Ensure lowercase type
+                name: String(c.name || ''),
+                contact: String(c.contact || ''),
+                address: String(c.address || ''),
+                gst: String(c.gst || '')
+            })) : [];
+            const itemsSheet = workbook.Sheets['items'];
+             data.items = itemsSheet ? XLSX.utils.sheet_to_json(itemsSheet).map(i => ({
+                id: Number(i.id),
+                name: String(i.name || ''),
+                unit: String(i.unit || ''),
+                hsnCode: String(i.hsnCode || ''),
+                gstPercentage: Number(i.gstPercentage || 0) // Default to 0 if missing
+            })) : [];
+            const purchasesSheet = workbook.Sheets['purchases'];
+            data.purchases = purchasesSheet ? XLSX.utils.sheet_to_json(purchasesSheet).map(p => ({
+                id: Number(p.id),
+                date: String(p.date || ''), // Keep date as string, format depends on Excel
+                supplierId: Number(p.supplierId),
+                 items: JSON.parse(String(p.items || '[]')), // Parse the JSON string back to array
+                paymentStatus: String(p.paymentStatus || 'pending').toLowerCase(),
+                paymentDate: String(p.paymentDate || '')
+            })) : [];
+            const deliveryChallansSheet = workbook.Sheets['deliveryChallans'];
+            data.deliveryChallans = deliveryChallansSheet ? XLSX.utils.sheet_to_json(deliveryChallansSheet).map(d => ({
+                id: Number(d.id),
+                challanNo: String(d.challanNo || ''),
+                date: String(d.date || ''), // Keep date as string
+                partyId: Number(d.partyId),
+                items: JSON.parse(String(d.items || '[]')), // Parse the JSON string back to array
+                paymentStatus: String(d.paymentStatus || 'pending').toLowerCase(),
+                paymentDate: String(d.paymentDate || '')
+            })) : [];
+            // Stock sheet is ignored as it's calculated
+             data.stock = calculateStock(); // Recalculate stock based on imported data
+            saveData(); // Save the imported data to Local Storage
+        }
+        function saveToExcel() {
+            const workbook = XLSX.utils.book_new();
+            // Prepare data for Excel
+            const contactsExport = data.contacts.map(({ id, type, name, contact, address, gst }) => ({ id, type, name, contact, address, gst }));
+            const contactsSheet = XLSX.utils.json_to_sheet(contactsExport);
+            XLSX.utils.book_append_sheet(workbook, contactsSheet, 'contacts');
+             const itemsExport = data.items.map(({ id, name, unit, hsnCode, gstPercentage }) => ({ id, name, unit, hsnCode, gstPercentage }));
+            const itemsSheet = XLSX.utils.json_to_sheet(itemsExport);
+            XLSX.utils.book_append_sheet(workbook, itemsSheet, 'items');
+            // Stringify the items array within purchases and challans for saving to a single cell
+            const purchasesExport = data.purchases.map(p => ({
+                id: p.id,
+                date: p.date,
+                supplierId: p.supplierId,
+                items: JSON.stringify(p.items), // Store items as a JSON string
+                paymentStatus: p.paymentStatus,
+                paymentDate: p.paymentDate
+            }));
+            const purchasesSheet = XLSX.utils.json_to_sheet(purchasesExport);
+            XLSX.utils.book_append_sheet(workbook, purchasesSheet, 'purchases');
+            const deliveryChallansExport = data.deliveryChallans.map(d => ({
+                id: d.id,
+                challanNo: d.challanNo,
+                date: d.date,
+                partyId: d.partyId,
+                items: JSON.stringify(d.items), // Store items as a JSON string
+                paymentStatus: d.paymentStatus,
+                paymentDate: d.paymentDate
+            }));
+            const deliveryChallansSheet = XLSX.utils.json_to_sheet(deliveryChallansExport);
+            XLSX.utils.book_append_sheet(workbook, deliveryChallansSheet, 'deliveryChallans');
+            // Calculate and export current stock
+            const stockExport = calculateStock().map(s => {
+                 const item = data.items.find(i => i.id === s.itemId);
+                 return {
+                     Item: item ? item.name : 'Unknown Item',
+                     'Item ID': s.itemId, // Include ID for clarity
+                     Quantity: s.quantity,
+                     Unit: item ? item.unit : 'N/A'
+                 };
+             });
+            const stockSheet = XLSX.utils.json_to_sheet(stockExport);
+            XLSX.utils.book_append_sheet(workbook, stockSheet, 'stock'); // Add calculated stock sheet
+            XLSX.writeFile(workbook, 'aai_data.xlsx'); // Changed filename
+            showToast('Data exported to Excel file', 'success');
+        }
+
+        // --- UI and Data Management Functions ---
+        let editingContactId = null;
+        let editingItemId = null;
+        let editingPurchaseId = null;
+        let editingDeliveryChallanId = null;
+         // Function to calculate current stock based on purchases and delivery challans
+         function calculateStock() {
+            const stockMap = new Map(); // Map itemId to quantity
+            // Add quantities from purchases
+            data.purchases.forEach(purchase => {
+                if (purchase.items && Array.isArray(purchase.items)) {
+                    purchase.items.forEach(item => {
+                        if (item.itemId && item.quantity) {
+                            const currentQty = stockMap.get(item.itemId) || 0;
+                            stockMap.set(item.itemId, currentQty + Number(item.quantity));
+                        }
+                    });
+                }
+            });
+            // Subtract quantities from delivery challans
+             data.deliveryChallans.forEach(challan => {
+                 if (challan.items && Array.isArray(challan.items)) {
+                     challan.items.forEach(item => {
+                         if (item.itemId && item.quantity) {
+                             const currentQty = stockMap.get(item.itemId) || 0;
+                             stockMap.set(item.itemId, currentQty - Number(item.quantity));
+                         }
+                     });
+                 }
+            });
+            // Convert map back to array, filtering out items with zero or negative stock (optional, but keeps the table clean)
+             const calculatedStock = Array.from(stockMap.entries())
+                 .map(([itemId, quantity]) => ({ itemId: Number(itemId), quantity: Number(quantity) })) // Ensure numbers
+                 .filter(item => item.quantity > 0);
+             return calculatedStock;
+         }
+
+        function showSection(sectionId) {
+            document.querySelectorAll('.section').forEach(section => section.classList.remove('active'));
+            document.getElementById(sectionId).classList.add('active');
+        }
+        function openModal(modalId) {
+            document.getElementById(modalId).classList.add('active');
+            // Specific modal setup calls
+            if (modalId === 'addPurchaseModal') {
+                populatePurchaseDropdowns();
+                // Attach listener to payment status change
+                 document.getElementById('purchasePaymentStatus').addEventListener('change', handlePaymentStatusChange);
+                 handlePaymentStatusChange.call(document.getElementById('purchasePaymentStatus')); // Call initially
+            } else if (modalId === 'addDeliveryChallanModal') {
+                populateDeliveryChallanDropdowns();
+                 // Attach listener to payment status change
+                 document.getElementById('deliveryChallanPaymentStatus').addEventListener('change', handlePaymentStatusChange);
+                 handlePaymentStatusChange.call(document.getElementById('deliveryChallanPaymentStatus')); // Call initially
+            } else if (modalId === 'addItemModal') {
+                 // Clear validation errors when opening empty modal
+                 document.getElementById('itemName').classList.remove('input-error');
+                 document.getElementById('itemNameError').style.display = 'none';
+                 document.getElementById('itemUnit').classList.remove('input-error');
+                 document.getElementById('itemUnitError').style.display = 'none';
+                 document.getElementById('itemGST').classList.remove('input-error');
+                 document.getElementById('itemGSTError').style.display = 'none';
+            } else if (modalId === 'addContactModal') {
+                // Clear validation errors when opening empty modal
+                 document.getElementById('contactName').classList.remove('input-error');
+                 document.getElementById('contactNameError').style.display = 'none';
+                 document.getElementById('contactContact').classList.remove('input-error');
+                 document.getElementById('contactContactError').style.display = 'none';
+                 document.getElementById('contactGST').classList.remove('input-error');
+                 document.getElementById('contactGSTError').style.display = 'none';
+            }
+        }
+        function closeModal(modalId) {
+             // Remove item inputs except the first one
+            if (modalId === 'addPurchaseModal') {
+                 const itemsContainer = document.getElementById('purchaseItems');
+                 while (itemsContainer.children.length > 1) {
+                     itemsContainer.removeChild(itemsContainer.lastChild);
+                 }
+                 // Reset the first item's inputs
+                 const firstItem = itemsContainer.querySelector('.purchase-item');
+                 if(firstItem) {
+                     firstItem.querySelector('.purchaseItemSelect').value = '';
+                     firstItem.querySelector('.purchaseQuantity').value = '';
+                     firstItem.querySelector('.purchasePrice').value = '';
+                     firstItem.querySelector('.purchaseEnableGST').checked = false;
+                 }
+                 // Remove payment status listener
+                 document.getElementById('purchasePaymentStatus').removeEventListener('change', handlePaymentStatusChange);
+                 document.getElementById('purchasePaymentDateContainer').classList.add('hidden'); // Hide payment date
+            } else if (modalId === 'addDeliveryChallanModal') {
+                const itemsContainer = document.getElementById('deliveryChallanItems');
+                 while (itemsContainer.children.length > 1) {
+                     itemsContainer.removeChild(itemsContainer.lastChild);
+                 }
+                 // Reset the first item's inputs
+                 const firstItem = itemsContainer.querySelector('.delivery-challan-item');
+                 if(firstItem) {
+                     firstItem.querySelector('.deliveryChallanItemSelect').value = '';
+                     firstItem.querySelector('.deliveryChallanQuantity').value = '';
+                     firstItem.querySelector('.deliveryChallanPrice').value = '';
+                     firstItem.querySelector('.deliveryChallanEnableGST').checked = false;
+                 }
+                // Remove payment status listener
+                document.getElementById('deliveryChallanPaymentStatus').removeEventListener('change', handlePaymentStatusChange);
+                document.getElementById('deliveryChallanPaymentDateContainer').classList.add('hidden'); // Hide payment date
+            }
+            // Clear form inputs in the closing modal
+            document.querySelectorAll(`#${modalId} input, #${modalId} select, #${modalId} textarea`).forEach(input => {
+                if (input.type === 'checkbox') {
+                    input.checked = false;
+                } else if (input.tagName === 'SELECT') {
+                    input.value = ''; // Reset select
+                } else {
+                    input.value = ''; // Clear text, number, date inputs
+                }
+                input.classList.remove('input-error');
+                const errorSpan = document.getElementById(`${input.id}Error`);
+                if (errorSpan) errorSpan.style.display = 'none';
+            });
+            document.getElementById(modalId).classList.remove('active');
+        }
+         function handlePaymentStatusChange() {
+             const paymentStatus = this.value; // 'this' refers to the select element
+             const paymentDateContainerId = this.id === 'purchasePaymentStatus' ? 'purchasePaymentDateContainer' : 'deliveryChallanPaymentDateContainer';
+             const paymentDateContainer = document.getElementById(paymentDateContainerId);
+             if (paymentStatus === 'paid') {
+                 paymentDateContainer.classList.remove('hidden');
+             } else {
+                 paymentDateContainer.classList.add('hidden');
+                 paymentDateContainer.querySelector('input[type="date"]').value = ''; // Clear date if not paid
+             }
+         }
+
+        function populateDropdown(selectId, dataArray, valueKey, textKey) {
+            const select = document.getElementById(selectId);
+            if (!select) return; // Check if element exists
+            select.innerHTML = '<option value="">Select</option>';
+            dataArray.forEach(item => {
+                const option = document.createElement('option');
+                option.value = item[valueKey];
+                option.textContent = item[textKey];
+                select.appendChild(option);
+            });
+        }
+        function populateItemDropdown(select) {
+             if (!select) return; // Check if element exists
+            select.innerHTML = '<option value="">Select Item</option>';
+            data.items.forEach(item => {
+                const option = document.createElement('option');
+                option.value = item.id;
+                option.textContent = item.name;
+                select.appendChild(option);
+            });
+        }
+        function showToast(message, type = 'success') {
+            const toast = document.getElementById('toast');
+             if (!toast) return; // Check if element exists
+            toast.textContent = message;
+            toast.className = 'toast'; // Reset classes
+            toast.classList.add(type);
+            toast.style.display = 'block';
+            setTimeout(() => {
+                toast.style.display = 'none';
+                toast.classList.remove(type);
+            }, 3000);
+        }
+        function filterTable(tableId, query) {
+            const table = document.getElementById(tableId);
+             if (!table) return; // Check if element exists
+            const rows = table.getElementsByTagName('tr');
+            for (let i = 0; i < rows.length; i++) {
+                const row = rows[i];
+                // Exclude header row (if any, assuming thead takes care of it, but defensive check)
+                 if (row.closest('thead')) continue;
+                const cells = row.getElementsByTagName('td');
+                let rowText = '';
+                for (let j = 0; j < cells.length; j++) {
+                    // Exclude the 'Actions' column from search
+                    if (j < cells.length - 1) {
+                        rowText += cells[j].textContent + ' ';
+                    }
+                }
+                row.style.display = rowText.toLowerCase().includes(query.toLowerCase()) ? '' : 'none';
+            }
+        }
+
+        let sortDirections = {}; // To keep track of sort direction for each table/column
+        function sortTable(tableId, colIndex) {
+            const table = document.getElementById(tableId);
+             if (!table) return;
+            const tbody = table.querySelector('tbody');
+            if (!tbody) return;
+            const rows = Array.from(tbody.rows);
+            let currentSortDir = sortDirections[`${tableId}-${colIndex}`] || 'asc';
+            const newSortDir = currentSortDir === 'asc' ? 'desc' : 'asc';
+            sortDirections[`${tableId}-${colIndex}`] = newSortDir; // Store the new direction
+            const isNumeric = colIndex === 0; // Assuming ID is always the first column and is numeric
+
+            rows.sort((a, b) => {
+                const aVal = a.cells[colIndex].textContent.trim();
+                const bVal = b.cells[colIndex].textContent.trim();
+                let comparison = 0;
+                 if (isNumeric) {
+                     comparison = Number(aVal) - Number(bVal);
+                 } else {
+                     comparison = aVal.localeCompare(bVal);
+                 }
+
+                return newSortDir === 'asc' ? comparison : -comparison;
+            });
+            // Clear existing tbody and append sorted rows
+            while (tbody.firstChild) {
+                tbody.removeChild(tbody.firstChild);
+            }
+            rows.forEach(row => tbody.appendChild(row));
+        }
+
+        function toggleDarkMode() {
+            document.body.classList.toggle('dark-mode');
+            localStorage.setItem('darkMode', document.body.classList.contains('dark-mode'));
+        }
+        function exportToCSV(tableId, filename) {
+            const table = document.getElementById(tableId);
+            if (!table) {
+                 showToast(`Table '${tableId}' not found`, 'error');
+                 return;
+            }
+            const rows = table.querySelectorAll('tr');
+            let csv = [];
+            rows.forEach(row => {
+                const cols = row.querySelectorAll('td, th');
+                 // Exclude the 'Actions' column (last one)
+                const rowData = Array.from(cols).slice(0, -1).map(col => {
+                    let text = col.textContent.trim();
+                     // Handle multi-line content in 'Items' column for Purchases/Challans
+                     if (col.querySelector('div')) {
+                         text = Array.from(col.querySelectorAll('div')).map(div => div.textContent.trim()).join('; ');
+                     }
+                    // Escape double quotes within the data
+                    text = text.replace(/"/g, '""');
+                    return `"${text}"`;
+                }).join(',');
+                csv.push(rowData);
+            });
+            const csvContent = csv.join('\n');
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            a.style.display = 'none'; // Hide the element
+            document.body.appendChild(a); // Append to body to make it clickable
+            a.click();
+            document.body.removeChild(a); // Clean up
+            URL.revokeObjectURL(url); // Free up memory
+             showToast('Data exported to CSV', 'success');
+        }
+
+        function addPurchaseItem() {
+            const purchaseItems = document.getElementById('purchaseItems');
+             if (!purchaseItems) return;
+            const newItem = document.createElement('div');
+             newItem.classList.add('purchase-item', 'space-y-2', 'border', 'p-3', 'rounded', 'mt-2'); // Added classes
+            newItem.innerHTML = `
+                <label class="block text-sm font-medium text-gray-700">Item</label>
+                <select class="purchaseItemSelect mt-1 block w-full p-2 border border-gray-300 rounded-md" required></select>
+                <label class="block text-sm font-medium text-gray-700">Quantity</label>
+                <input type="number" class="purchaseQuantity mt-1 block w-full p-2 border border-gray-300 rounded-md" required min="1">
+                <label class="block text-sm font-medium text-gray-700">Price (per unit)</label>
+                <input type="number" class="purchasePrice mt-1 block w-full p-2 border border-gray-300 rounded-md" step="0.01" required min="0">
+                 <div class="flex items-center">
+                    <input type="checkbox" class="purchaseEnableGST mt-1 mr-2">
+                    <label class="text-sm font-medium text-gray-700">Enable GST</label>
+                </div>
+                 <button class="text-red-600 hover:text-red-800 text-sm mt-2" onclick="removePurchaseItem(this)">Remove Item</button> <!-- Add remove button -->
+            `;
+            purchaseItems.appendChild(newItem);
+            populateItemDropdown(newItem.querySelector('.purchaseItemSelect'));
+        }
+         function removePurchaseItem(buttonElement) {
+             const itemDiv = buttonElement.closest('.purchase-item');
+             if (document.querySelectorAll('.purchase-item').length > 1) { // Ensure at least one item remains
+                itemDiv.remove();
+             } else {
+                 showToast('Cannot remove the last item', 'error');
+             }
+         }
+
+        function addDeliveryChallanItem() {
+            const deliveryChallanItems = document.getElementById('deliveryChallanItems');
+            if (!deliveryChallanItems) return;
+            const newItem = document.createElement('div');
+             newItem.classList.add('delivery-challan-item', 'space-y-2', 'border', 'p-3', 'rounded', 'mt-2'); // Added classes
+            newItem.innerHTML = `
+                <label class="block text-sm font-medium text-gray-700">Item</label>
+                <select class="deliveryChallanItemSelect mt-1 block w-full p-2 border border-gray-300 rounded-md" required></select>
+                <label class="block text-sm font-medium text-gray-700">Quantity</label>
+                <input type="number" class="deliveryChallanQuantity mt-1 block w-full p-2 border border-gray-300 rounded-md" required min="1">
+                <label class="block text-sm font-medium text-gray-700">Price (per unit)</label>
+                <input type="number" class="deliveryChallanPrice mt-1 block w-full p-2 border border-gray-300 rounded-md" step="0.01" required min="0">
+                 <div class="flex items-center">
+                    <input type="checkbox" class="deliveryChallanEnableGST mt-1 mr-2">
+                    <label class="text-sm font-medium text-gray-700">Enable GST</label>
+                </div>
+                <button class="text-red-600 hover:text-red-800 text-sm mt-2" onclick="removeDeliveryChallanItem(this)">Remove Item</button> <!-- Add remove button -->
+            `;
+            deliveryChallanItems.appendChild(newItem);
+            populateItemDropdown(newItem.querySelector('.deliveryChallanItemSelect'));
+        }
+         function removeDeliveryChallanItem(buttonElement) {
+            const itemDiv = buttonElement.closest('.delivery-challan-item');
+             if (document.querySelectorAll('.delivery-challan-item').length > 1) { // Ensure at least one item remains
+                itemDiv.remove();
+             } else {
+                 showToast('Cannot remove the last item', 'error');
+             }
+         }
+
+        function validateContact(input) {
+            const value = input.value.trim();
+            const errorSpan = document.getElementById('contactContactError');
+             if (!errorSpan) return;
+            if (value && !/^[0-9]{10}$/.test(value)) {
+                input.classList.add('input-error');
+                errorSpan.style.display = 'block';
+                return false;
+            } else {
+                input.classList.remove('input-error');
+                errorSpan.style.display = 'none';
+                 return true;
+            }
+        }
+        function validateGST(input) {
+            const value = input.value.trim();
+            const errorSpan = document.getElementById('contactGSTError');
+             if (!errorSpan) return;
+             // Basic GST format validation (2 digit state code, 5 char PAN, 4 digit entity code, 1 char state check digit, Z, 1 char check digit)
+            if (value && !/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[0-9A-Z]{1}Z[0-9A-Z]{1}$/.test(value)) {
+                input.classList.add('input-error');
+                errorSpan.style.display = 'block';
+                 return false;
+            } else {
+                input.classList.remove('input-error');
+                errorSpan.style.display = 'none';
+                 return true;
+            }
+        }
+        function validateGSTPercentage(input) {
+            const value = parseFloat(input.value);
+            const errorSpan = document.getElementById('itemGSTError');
+             if (!errorSpan) return;
+            if (value < 0 || isNaN(value)) {
+                input.classList.add('input-error');
+                errorSpan.style.display = 'block';
+                 return false;
+            } else {
+                input.classList.remove('input-error');
+                errorSpan.style.display = 'none';
+                 return true;
+            }
+        }
+        function showSpinner(id) {
+             const spinner = document.getElementById(id);
+             if(spinner) spinner.style.display = 'inline-block';
+        }
+        function hideSpinner(id) {
+            const spinner = document.getElementById(id);
+            if(spinner) spinner.style.display = 'none';
+        }
+        // --- CRUD Operations ---
+        function openContactModal(id = null) {
+            editingContactId = id;
+            document.getElementById('contactModalTitle').textContent = id ? 'Edit Contact' : 'Add Contact';
+            // Reset form
+            document.getElementById('contactType').value = 'supplier';
+            document.getElementById('contactName').value = '';
+            document.getElementById('contactContact').value = '';
+            document.getElementById('contactAddress').value = '';
+            document.getElementById('contactGST').value = '';
+            if (id) {
+                const contact = data.contacts.find(c => c.id === id);
+                if (contact) {
+                    document.getElementById('contactType').value = contact.type || 'supplier';
+                    document.getElementById('contactName').value = contact.name || '';
+                    document.getElementById('contactContact').value = contact.contact || '';
+                    document.getElementById('contactAddress').value = contact.address || '';
+                    document.getElementById('contactGST').value = contact.gst || '';
+                }
+            }
+            openModal('addContactModal');
+        }
+        function saveContact() {
+            showSpinner('contactSaveSpinner');
+            const type = document.getElementById('contactType').value;
+            const nameInput = document.getElementById('contactName');
+            const contactInput = document.getElementById('contactContact');
+            const address = document.getElementById('contactAddress').value.trim();
+            const gstInput = document.getElementById('contactGST');
+            const name = nameInput.value.trim();
+            const contact = contactInput.value.trim();
+            const gst = gstInput.value.trim();
+            // Basic validation
+            let isValid = true;
+            if (!name) {
+                 nameInput.classList.add('input-error');
+                 document.getElementById('contactNameError').style.display = 'block';
+                 isValid = false;
+            } else {
+                 nameInput.classList.remove('input-error');
+                 document.getElementById('contactNameError').style.display = 'none';
+            }
+             if (!validateContact(contactInput)) isValid = false;
+             if (!validateGST(gstInput)) isValid = false;
+
+            if (!isValid) {
+                showToast('Please fix the errors', 'error');
+                hideSpinner('contactSaveSpinner');
+                return;
+            }
+            const contactData = { type, name, contact, address, gst };
+            if (editingContactId) {
+                const index = data.contacts.findIndex(c => c.id === editingContactId);
+                if (index !== -1) {
+                     // Check if any associated transactions exist if type is changed
+                     const oldType = data.contacts[index].type;
+                     if (oldType !== type) {
+                         if (oldType === 'supplier' && data.purchases.some(p => p.supplierId === editingContactId)) {
+                             showToast(`Cannot change type to "${type}" for a supplier with purchases.`, 'error');
+                             hideSpinner('contactSaveSpinner');
+                             return;
+                         }
+                         if (oldType === 'party' && data.deliveryChallans.some(d => d.partyId === editingContactId)) {
+                             showToast(`Cannot change type to "${type}" for a party with delivery challans.`, 'error');
+                             hideSpinner('contactSaveSpinner');
+                             return;
+                         }
+                     }
+                     data.contacts[index] = { id: editingContactId, ...contactData };
+                 } else {
+                      // Should not happen if editingContactId is valid
+                      showToast('Error: Contact not found for editing.', 'error');
+                 }
+            } else {
+                 // Assign a new unique ID (timestamp is usually sufficient for small local apps)
+                data.contacts.push({ id: Date.now(), ...contactData });
+            }
+            editingContactId = null;
+            saveData(); // Save data and update UI
+            hideSpinner('contactSaveSpinner');
+            closeModal('addContactModal');
+            showToast('Contact saved successfully', 'success');
+        }
+        function deleteContact(id) {
+            const contactIndex = data.contacts.findIndex(c => c.id === id);
+            if (contactIndex === -1) {
+                showToast('Contact not found', 'error');
+                return;
+            }
+            const contact = data.contacts[contactIndex];
+            // Check for associated transactions BEFORE deleting
+            const hasPurchases = data.purchases.some(p => p.supplierId === id);
+            const hasChallans = data.deliveryChallans.some(d => d.partyId === id);
+            if (hasPurchases || hasChallans) {
+                showToast('Cannot delete contact with associated purchases or delivery challans', 'error');
+                return;
+            }
+            if (confirm(`Are you sure you want to delete contact '${contact.name}'? This action cannot be undone.`)) {
+                data.contacts.splice(contactIndex, 1); // Remove the contact
+                saveData(); // Save data and update UI
+                showToast('Contact deleted successfully', 'success');
+            }
+        }
+
+        function openItemModal(id = null) {
+            editingItemId = id;
+            document.getElementById('itemModalTitle').textContent = id ? 'Edit Item' : 'Add Item';
+            // Reset form
+            document.getElementById('itemName').value = '';
+            document.getElementById('itemUnit').value = '';
+            document.getElementById('itemHSN').value = '';
+            document.getElementById('itemGST').value = '';
+            if (id) {
+                const item = data.items.find(i => i.id === id);
+                if (item) {
+                    document.getElementById('itemName').value = item.name || '';
+                    document.getElementById('itemUnit').value = item.unit || '';
+                    document.getElementById('itemHSN').value = item.hsnCode || '';
+                    document.getElementById('itemGST').value = item.gstPercentage || '';
+                }
+            }
+            openModal('addItemModal');
+        }
+        function saveItem() {
+            showSpinner('itemSaveSpinner');
+            const nameInput = document.getElementById('itemName');
+            const unitInput = document.getElementById('itemUnit');
+            const hsnCode = document.getElementById('itemHSN').value.trim();
+            const gstInput = document.getElementById('itemGST');
+            const name = nameInput.value.trim();
+            const unit = unitInput.value.trim();
+            const gstPercentage = parseFloat(gstInput.value) || 0;
+            // Basic validation
+             let isValid = true;
+            if (!name) {
+                 nameInput.classList.add('input-error');
+                 document.getElementById('itemNameError').style.display = 'block';
+                 isValid = false;
+            } else {
+                 nameInput.classList.remove('input-error');
+                 document.getElementById('itemNameError').style.display = 'none';
+            }
+             if (!unit) {
+                 unitInput.classList.add('input-error');
+                 document.getElementById('itemUnitError').style.display = 'block';
+                 isValid = false;
+            } else {
+                 unitInput.classList.remove('input-error');
+                 document.getElementById('itemUnitError').style.display = 'none';
+            }
+            if (!validateGSTPercentage(gstInput)) isValid = false;
+            if (!isValid) {
+                showToast('Please fix the errors', 'error');
+                hideSpinner('itemSaveSpinner');
+                return;
+            }
+
+            const itemData = { name, unit, hsnCode, gstPercentage };
+            if (editingItemId) {
+                const index = data.items.findIndex(i => i.id === editingItemId);
+                 if (index !== -1) {
+                     // Update item details, stock is recalculated automatically by saveData
+                     data.items[index] = { id: editingItemId, ...itemData };
+                 } else {
+                      showToast('Error: Item not found for editing.', 'error');
+                 }
+            } else {
+                 // Assign a new unique ID
+                data.items.push({ id: Date.now(), ...itemData });
+            }
+            editingItemId = null;
+            saveData(); // Save data and update UI
+            hideSpinner('itemSaveSpinner');
+            closeModal('addItemModal');
+             showToast('Item saved successfully', 'success');
+        }
+        function deleteItem(id) {
+            const itemIndex = data.items.findIndex(i => i.id === id);
+            if (itemIndex === -1) {
+                showToast('Item not found', 'error');
+                return;
+            }
+            const item = data.items[itemIndex];
+            // Check for associated transactions or stock BEFORE deleting
+            const hasPurchaseItems = data.purchases.some(p => p.items && p.items.some(it => Number(it.itemId) === id));
+            const hasChallanItems = data.deliveryChallans.some(d => d.items && d.items.some(it => Number(it.itemId) === id));
+            const hasStock = data.stock.some(s => Number(s.itemId) === id);
+
+            if (hasPurchaseItems || hasChallanItems || hasStock) {
+                showToast('Cannot delete item with associated purchases, delivery challans, or stock.', 'error');
+                return;
+            }
+            if (confirm(`Are you sure you want to delete item '${item.name}'? This action cannot be undone.`)) {
+                data.items.splice(itemIndex, 1); // Remove the item
+                saveData(); // Save data and update UI
+                showToast('Item deleted successfully', 'success');
+            }
+        }
+
+        function openPurchaseModal(id = null) {
+            editingPurchaseId = id;
+            document.getElementById('purchaseModalTitle').textContent = id ? 'Edit Purchase' : 'Add Purchase';
+            // Reset form
+            document.getElementById('purchaseDate').value = '';
+            document.getElementById('purchaseSupplier').value = '';
+            document.getElementById('purchasePaymentStatus').value = 'pending';
+            document.getElementById('purchasePaymentDate').value = ''; // Cleared by closeModal
+             // Clear existing items and add one empty item row
+             const itemsContainer = document.getElementById('purchaseItems');
+             if (itemsContainer) {
+                 itemsContainer.innerHTML = ''; // Clear all child nodes
+                 addPurchaseItem(); // Add a fresh, empty item row
+             }
+            // Populate supplier dropdown
+            populatePurchaseDropdowns();
+            if (id) {
+                const purchase = data.purchases.find(p => p.id === id);
+                if (purchase) {
+                     document.getElementById('purchaseDate').value = purchase.date || '';
+                    document.getElementById('purchaseSupplier').value = purchase.supplierId || '';
+                    document.getElementById('purchasePaymentStatus').value = purchase.paymentStatus || 'pending';
+                    document.getElementById('purchasePaymentDate').value = purchase.paymentDate || ''; // Populated if exists
+                    // Clear existing items and populate from purchase data
+                    if (itemsContainer) {
+                        itemsContainer.innerHTML = ''; // Clear all child nodes
+                        if (purchase.items && Array.isArray(purchase.items) && purchase.items.length > 0) {
+                             purchase.items.forEach(item => {
+                                const newItemDiv = document.createElement('div');
+                                newItemDiv.classList.add('purchase-item', 'space-y-2', 'border', 'p-3', 'rounded', 'mt-2');
+                                newItemDiv.innerHTML = `
+                                    <label class="block text-sm font-medium text-gray-700">Item</label>
+                                    <select class="purchaseItemSelect mt-1 block w-full p-2 border border-gray-300 rounded-md" required></select>
+                                    <label class="block text-sm font-medium text-gray-700">Quantity</label>
+                                    <input type="number" class="purchaseQuantity mt-1 block w-full p-2 border border-gray-300 rounded-md" value="${Number(item.quantity) || ''}" required min="1">
+                                    <label class="block text-sm font-medium text-gray-700">Price (per unit)</label>
+                                    <input type="number" class="purchasePrice mt-1 block w-full p-2 border border-gray-300 rounded-md" step="0.01" value="${Number(item.pricePerUnit) || ''}" required min="0">
+                                     <div class="flex items-center">
+                                        <input type="checkbox" class="purchaseEnableGST mt-1 mr-2" ${item.enableGST ? 'checked' : ''}>
+                                        <label class="text-sm font-medium text-gray-700">Enable GST</label>
+                                    </div>
+                                    <button class="text-red-600 hover:text-red-800 text-sm mt-2" onclick="removePurchaseItem(this)">Remove Item</button>
+                                `;
+                                itemsContainer.appendChild(newItemDiv);
+                                populateItemDropdown(newItemDiv.querySelector('.purchaseItemSelect'));
+                                 newItemDiv.querySelector('.purchaseItemSelect').value = item.itemId || ''; // Set the selected item
+                            });
+                         } else {
+                             addPurchaseItem(); // Add one empty item if purchase.items is empty
+                         }
+                    }
+                }
+            }
+            openModal('addPurchaseModal'); // Call openModal after populating data
+        }
+        function savePurchase() {
+            showSpinner('purchaseSaveSpinner');
+            const dateInput = document.getElementById('purchaseDate');
+            const supplierSelect = document.getElementById('purchaseSupplier');
+            const paymentStatusSelect = document.getElementById('purchasePaymentStatus');
+            const paymentDateInput = document.getElementById('purchasePaymentDate');
+            const itemsContainer = document.getElementById('purchaseItems');
+            const date = dateInput.value;
+            const supplierId = parseInt(supplierSelect.value);
+            const paymentStatus = paymentStatusSelect.value;
+            const paymentDate = paymentDateInput.value;
+            const items = [];
+            let isValid = true;
+            const purchaseItemDivs = itemsContainer ? itemsContainer.querySelectorAll('.purchase-item') : [];
+            if (purchaseItemDivs.length === 0) {
+                 showToast('Add at least one item', 'error');
+                 isValid = false;
+            } else {
+                 purchaseItemDivs.forEach((itemDiv, index) => {
+                     const itemSelect = itemDiv.querySelector('.purchaseItemSelect');
+                     const quantityInput = itemDiv.querySelector('.purchaseQuantity');
+                     const priceInput = itemDiv.querySelector('.purchasePrice');
+                     const enableGSTCheckbox = itemDiv.querySelector('.purchaseEnableGST');
+                     const itemId = parseInt(itemSelect.value);
+                     const quantity = parseInt(quantityInput.value);
+                     const pricePerUnit = parseFloat(priceInput.value);
+                     const enableGST = enableGSTCheckbox.checked;
+                     if (isNaN(itemId) || !itemId) { // Check if item is selected
+                          showToast(`Item ${index + 1}: Select an item`, 'error');
+                          itemSelect.classList.add('input-error');
+                          isValid = false;
+                     } else {
+                         itemSelect.classList.remove('input-error');
+                     }
+                     if (isNaN(quantity) || quantity <= 0) {
+                         showToast(`Item ${index + 1}: Enter a valid quantity`, 'error');
+                         quantityInput.classList.add('input-error');
+                         isValid = false;
+                     } else {
+                         quantityInput.classList.remove('input-error');
+                     }
+                     if (isNaN(pricePerUnit) || pricePerUnit < 0) {
+                         showToast(`Item ${index + 1}: Enter a valid price`, 'error');
+                         priceInput.classList.add('input-error');
+                         isValid = false;
+                     } else {
+                         priceInput.classList.remove('input-error');
+                     }
+
+                     // Find item details to get GST percentage
+                     const itemDetails = data.items.find(i => i.id === itemId);
+                     const gstPercentage = enableGST && itemDetails ? (itemDetails.gstPercentage || 0) : 0;
+                     const basePrice = (pricePerUnit || 0) * (quantity || 0);
+                     const cgst = (basePrice * (gstPercentage / 2)) / 100;
+                     const sgst = (basePrice * (gstPercentage / 2)) / 100;
+                     const total = basePrice + cgst + sgst;
+
+                     items.push({ itemId, quantity, pricePerUnit, enableGST, gstPercentage, cgst, sgst, total });
+                 });
+            }
+
+            if (!date || isNaN(supplierId) || !paymentStatus || !isValid) {
+                showToast('Please fill in all required fields', 'error');
+                hideSpinner('purchaseSaveSpinner');
+                return;
+            }
+            // If paid, payment date is required
+             if (paymentStatus === 'paid' && !paymentDate) {
+                 showToast('Payment date is required for paid status', 'error');
+                 paymentDateInput.classList.add('input-error');
+                 hideSpinner('purchaseSaveSpinner');
+                 return;
+             } else {
+                 paymentDateInput.classList.remove('input-error');
+             }
+
+            const purchaseData = { date, supplierId, items, paymentStatus, paymentDate };
+            if (editingPurchaseId) {
+                const index = data.purchases.findIndex(p => p.id === editingPurchaseId);
+                if (index !== -1) {
+                    // No need to update stock manually here, calculateStock handles it on saveData
+                    data.purchases[index] = { id: editingPurchaseId, ...purchaseData };
+                } else {
+                    showToast('Error: Purchase not found for editing.', 'error');
+                }
+            } else {
+                 // Assign a new unique ID
+                data.purchases.push({ id: Date.now(), ...purchaseData });
+            }
+            editingPurchaseId = null;
+            saveData(); // Save data and update UI (which includes recalculating stock)
+            hideSpinner('purchaseSaveSpinner');
+            closeModal('addPurchaseModal');
+             showToast('Purchase saved successfully', 'success');
+        }
+        function deletePurchase(id) {
+            const purchaseIndex = data.purchases.findIndex(p => p.id === id);
+            if (purchaseIndex === -1) {
+                showToast('Purchase not found', 'error');
+                return;
+            }
+             const purchase = data.purchases[purchaseIndex];
+            if (confirm(`Are you sure you want to delete purchase ID ${purchase.id}? This action cannot be undone.`)) {
+                // Stock update is now handled automatically by calculateStock before saveData
+                data.purchases.splice(purchaseIndex, 1); // Remove the purchase
+                saveData(); // Save data and update UI (which includes recalculating stock)
+                showToast('Purchase deleted successfully', 'success');
+            }
+        }
+        function openDeliveryChallanModal(id = null) {
+            editingDeliveryChallanId = id;
+            document.getElementById('deliveryChallanModalTitle').textContent = id ? 'Edit Delivery Challan' : 'Add Delivery Challan';
+             // Reset form
+            document.getElementById('deliveryChallanNo').value = '';
+            document.getElementById('deliveryChallanDate').value = '';
+            document.getElementById('deliveryChallanParty').value = '';
+            document.getElementById('deliveryChallanPaymentStatus').value = 'pending';
+            document.getElementById('deliveryChallanPaymentDate').value = ''; // Cleared by closeModal
+            // Clear existing items and add one empty item row
+            const itemsContainer = document.getElementById('deliveryChallanItems');
+             if (itemsContainer) {
+                 itemsContainer.innerHTML = ''; // Clear all child nodes
+                 addDeliveryChallanItem(); // Add a fresh, empty item row
+             }
+            // Populate party dropdown
+            populateDeliveryChallanDropdowns();
+            if (id) {
+                const challan = data.deliveryChallans.find(d => d.id === id);
+                if (challan) {
+                    document.getElementById('deliveryChallanNo').value = challan.challanNo || '';
+                    document.getElementById('deliveryChallanDate').value = challan.date || '';
+                    document.getElementById('deliveryChallanParty').value = challan.partyId || '';
+                    document.getElementById('deliveryChallanPaymentStatus').value = challan.paymentStatus || 'pending';
+                     document.getElementById('deliveryChallanPaymentDate').value = challan.paymentDate || ''; // Populated if exists
+                    // Clear existing items and populate from challan data
+                    if (itemsContainer) {
+                        itemsContainer.innerHTML = ''; // Clear all child nodes
+                         if (challan.items && Array.isArray(challan.items) && challan.items.length > 0) {
+                             challan.items.forEach(item => {
+                                const newItemDiv = document.createElement('div');
+                                newItemDiv.classList.add('delivery-challan-item', 'space-y-2', 'border', 'p-3', 'rounded', 'mt-2');
+                                newItemDiv.innerHTML = `
+                                    <label class="block text-sm font-medium text-gray-700">Item</label>
+                                    <select class="deliveryChallanItemSelect mt-1 block w-full p-2 border border-gray-300 rounded-md" required></select>
+                                    <label class="block text-sm font-medium text-gray-700">Quantity</label>
+                                    <input type="number" class="deliveryChallanQuantity mt-1 block w-full p-2 border border-gray-300 rounded-md" value="${Number(item.quantity) || ''}" required min="1">
+                                    <label class="block text-sm font-medium text-gray-700">Price (per unit)</label>
+                                    <input type="number" class="deliveryChallanPrice mt-1 block w-full p-2 border border-gray-300 rounded-md" step="0.01" value="${Number(item.pricePerUnit) || ''}" required min="0">
+                                    <div class="flex items-center">
+                                        <input type="checkbox" class="deliveryChallanEnableGST mt-1 mr-2" ${item.enableGST ? 'checked' : ''}>
+                                        <label class="text-sm font-medium text-gray-700">Enable GST</label>
+                                    </div>
+                                    <button class="text-red-600 hover:text-red-800 text-sm mt-2" onclick="removeDeliveryChallanItem(this)">Remove Item</button>
+                                `;
+                                itemsContainer.appendChild(newItemDiv);
+                                populateItemDropdown(newItemDiv.querySelector('.deliveryChallanItemSelect'));
+                                 newItemDiv.querySelector('.deliveryChallanItemSelect').value = item.itemId || ''; // Set the selected item
+                            });
+                        } else {
+                             addDeliveryChallanItem(); // Add one empty item if challan.items is empty
+                        }
+                    }
+                }
+            }
+            openModal('addDeliveryChallanModal'); // Call openModal after populating data
+        }
+        function saveDeliveryChallan() {
+            showSpinner('deliveryChallanSaveSpinner');
+            const challanNoInput = document.getElementById('deliveryChallanNo');
+            const dateInput = document.getElementById('deliveryChallanDate');
+            const partySelect = document.getElementById('deliveryChallanParty');
+            const paymentStatusSelect = document.getElementById('deliveryChallanPaymentStatus');
+            const paymentDateInput = document.getElementById('deliveryChallanPaymentDate');
+             const itemsContainer = document.getElementById('deliveryChallanItems');
+            const challanNo = challanNoInput.value.trim();
+            const date = dateInput.value;
+            const partyId = parseInt(partySelect.value);
+            const paymentStatus = paymentStatusSelect.value;
+            const paymentDate = paymentDateInput.value;
+            const items = [];
+            let isValid = true;
+             const challanItemDivs = itemsContainer ? itemsContainer.querySelectorAll('.delivery-challan-item') : [];
+            if (challanItemDivs.length === 0) {
+                showToast('Add at least one item', 'error');
+                isValid = false;
+            } else {
+                challanItemDivs.forEach((itemDiv, index) => {
+                    const itemSelect = itemDiv.querySelector('.deliveryChallanItemSelect');
+                    const quantityInput = itemDiv.querySelector('.deliveryChallanQuantity');
+                    const priceInput = itemDiv.querySelector('.deliveryChallanPrice');
+                     const enableGSTCheckbox = itemDiv.querySelector('.deliveryChallanEnableGST');
+
+                     const itemId = parseInt(itemSelect.value);
+                     const quantity = parseInt(quantityInput.value);
+                     const pricePerUnit = parseFloat(priceInput.value);
+                     const enableGST = enableGSTCheckbox.checked;
+                     if (isNaN(itemId) || !itemId) { // Check if item is selected
+                          showToast(`Item ${index + 1}: Select an item`, 'error');
+                          itemSelect.classList.add('input-error');
+                          isValid = false;
+                     } else {
+                         itemSelect.classList.remove('input-error');
+                     }
+                     if (isNaN(quantity) || quantity <= 0) {
+                         showToast(`Item ${index + 1}: Enter a valid quantity`, 'error');
+                         quantityInput.classList.add('input-error');
+                         isValid = false;
+                     } else {
+                         quantityInput.classList.remove('input-error');
+                     }
+                     if (isNaN(pricePerUnit) || pricePerUnit < 0) {
+                         showToast(`Item ${index + 1}: Enter a valid price`, 'error');
+                         priceInput.classList.add('input-error');
+                         isValid = false;
+                     } else {
+                         priceInput.classList.remove('input-error');
+                     }
+                     // Find item details to get GST percentage
+                     const itemDetails = data.items.find(i => i.id === itemId);
+                     const gstPercentage = enableGST && itemDetails ? (itemDetails.gstPercentage || 0) : 0;
+                     const basePrice = (pricePerUnit || 0) * (quantity || 0);
+                     const cgst = (basePrice * (gstPercentage / 2)) / 100;
+                     const sgst = (basePrice * (gstPercentage / 2)) / 100;
+                     const total = basePrice + cgst + sgst;
+                    items.push({ itemId, quantity, pricePerUnit, enableGST, gstPercentage, cgst, sgst, total });
+                });
+            }
+
+            if (!challanNo || !date || isNaN(partyId) || !paymentStatus || !isValid) {
+                showToast('Please fill in all required fields', 'error');
+                hideSpinner('deliveryChallanSaveSpinner');
+                return;
+            }
+            // If paid, payment date is required
+             if (paymentStatus === 'paid' && !paymentDate) {
+                 showToast('Payment date is required for paid status', 'error');
+                 paymentDateInput.classList.add('input-error');
+                 hideSpinner('deliveryChallanSaveSpinner');
+                 return;
+             } else {
+                 paymentDateInput.classList.remove('input-error');
+             }
+             // --- Stock Check BEFORE Saving Challan ---
+             let stockCheckValid = true;
+             if (!editingDeliveryChallanId) { // Only check stock when adding a new challan
+                 const currentStock = calculateStock(); // Get current theoretical stock
+                 items.forEach((item, index) => {
+                     const stockItem = currentStock.find(s => Number(s.itemId) === Number(item.itemId));
+                     const availableQuantity = stockItem ? Number(stockItem.quantity) : 0;
+                     // In edit mode, need to consider the old quantity vs new quantity
+                     // For simplicity here, we'll only enforce the check on NEW challans.
+                     // Editing a challan to increase quantity might require a more complex stock check
+                     // subtracting the old quantity and adding the new one to available stock.
+                     // For this implementation, we stick to the easier check on new challans.
+                     if (item.quantity > availableQuantity) {
+                         const itemName = data.items.find(i => i.id === item.itemId)?.name || 'Unknown Item';
+                         showToast(`Item "${itemName}": Insufficient stock. Available: ${availableQuantity}`, 'error');
+                         challanItemDivs[index].querySelector('.deliveryChallanQuantity').classList.add('input-error');
+                         stockCheckValid = false;
+                     } else {
+                          challanItemDivs[index].querySelector('.deliveryChallanQuantity').classList.remove('input-error');
+                     }
+                 });
+             }
+             if (!stockCheckValid) {
+                 hideSpinner('deliveryChallanSaveSpinner');
+                 return; // Stop if stock is insufficient for any item
+             }
+             // --- End Stock Check ---
+
+            const challanData = { challanNo, date, partyId, items, paymentStatus, paymentDate };
+            if (editingDeliveryChallanId) {
+                const index = data.deliveryChallans.findIndex(d => d.id === editingDeliveryChallanId);
+                if (index !== -1) {
+                     // No need to update stock manually here, calculateStock handles it on saveData
+                    data.deliveryChallans[index] = { id: editingDeliveryChallanId, ...challanData };
+                } else {
+                    showToast('Error: Delivery Challan not found for editing.', 'error');
+                }
+            } else {
+                 // Assign a new unique ID
+                data.deliveryChallans.push({ id: Date.now(), ...challanData });
+            }
+            editingDeliveryChallanId = null;
+            saveData(); // Save data and update UI (which includes recalculating stock)
+            hideSpinner('deliveryChallanSaveSpinner');
+            closeModal('addDeliveryChallanModal');
+            showToast('Delivery Challan saved successfully', 'success');
+        }
+        function deleteDeliveryChallan(id) {
+            const challanIndex = data.deliveryChallans.findIndex(d => d.id === id);
+            if (challanIndex === -1) {
+                showToast('Delivery challan not found', 'error');
+                return;
+            }
+             const challan = data.deliveryChallans[challanIndex];
+            if (confirm(`Are you sure you want to delete delivery challan ID ${challan.id}? This action cannot be undone.`)) {
+                 // Stock update is now handled automatically by calculateStock before saveData
+                data.deliveryChallans.splice(challanIndex, 1); // Remove the challan
+                saveData(); // Save data and update UI (which includes recalculating stock)
+                showToast('Delivery Challan deleted successfully', 'success');
+            }
+        }
+         // Removed openStockModal and addStock as stock is derived
+         // Stock management is now strictly via Purchases (add) and Delivery Challans (subtract)
+         /*
+        function openStockModal() {
+            populateDropdown('stockItem', data.items, 'id', 'name');
+            document.getElementById('stockQuantity').value = '';
+            openModal('addStockModal');
+        }
+        function addStock() {
+            showSpinner('stockSaveSpinner');
+            const itemId = parseInt(document.getElementById('stockItem').value);
+            const quantity = parseInt(document.getElementById('stockQuantity').value);
+            if (!itemId || isNaN(quantity) || quantity <= 0) {
+                showToast('Please select an item and enter a valid quantity', 'error');
+                hideSpinner('stockSaveSpinner');
+                return;
+            }
+            let stockItem = data.stock.find(s => s.itemId === itemId);
+            if (stockItem) {
+                stockItem.quantity += quantity;
+            } else {
+                data.stock.push({ itemId, quantity });
+            }
+            saveData();
+            hideSpinner('stockSaveSpinner');
+            closeModal('addStockModal');
+             showToast('Stock updated successfully', 'success');
+        }
+         */
+        /* Update Stock function is no longer needed for direct manipulation,
+           but the logic is incorporated into calculateStock() */
+        /*
+        function updateStock(itemId, quantity, action) {
+            let stockItem = data.stock.find(s => s.itemId === itemId);
+            if (!stockItem) {
+                // Only add item to stock if it's a purchase (add action)
+                 if (action === 'add') {
+                     stockItem = { itemId, quantity: 0 };
+                     data.stock.push(stockItem);
+                 } else {
+                     // Cannot subtract from stock that doesn't exist
+                     console.warn(`Attempted to subtract stock for item ${itemId} which is not tracked.`);
+                     return; // Exit the function
+                 }
+            }
+            stockItem.quantity += (action === 'add' ? quantity : -quantity);
+             // Optional: Remove item from stock array if quantity drops to 0 or less
+             // This keeps the stock list clean, but might make debugging harder
+            // if (stockItem.quantity <= 0) {
+            //     data.stock = data.stock.filter(s => s.itemId !== itemId);
+            // }
+            // Keep items with 0 stock in the array so they show on the stock list
+            // but filter for display in updateUI if needed (current updateUI already handles this)
+        }
+        */
+
+        function updateUI() {
+             // Recalculate stock every time UI is updated
+             data.stock = calculateStock();
+            // Update Dashboard counts
+            document.getElementById('totalContacts').textContent = data.contacts.length;
+            document.getElementById('totalItems').textContent = data.items.length;
+            document.getElementById('totalPurchases').textContent = data.purchases.length;
+            document.getElementById('totalDeliveryChallans').textContent = data.deliveryChallans.length;
+            // Update Contacts Table
+            const contactsTable = document.getElementById('contactsTable');
+             if (contactsTable) {
+                contactsTable.innerHTML = data.contacts.map(contact => `
+                    <tr class="hover:bg-gray-50">
+                        <td class="px-6 py-4 whitespace-nowrap">${contact.id}</td>
+                        <td class="px-6 py-4 whitespace-nowrap">${escapeHTML(contact.name)}</td>
+                        <td class="px-6 py-4 whitespace-nowrap">${escapeHTML(contact.type)}</td>
+                        <td class="px-6 py-4 whitespace-nowrap">${escapeHTML(contact.contact || '')}</td>
+                        <td class="px-6 py-4 whitespace-nowrap">${escapeHTML(contact.address || '')}</td>
+                        <td class="px-6 py-4 whitespace-nowrap">${escapeHTML(contact.gst || '')}</td>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            <button class="text-yellow-600 hover:text-yellow-800 mr-2" onclick="openContactModal(${contact.id})">Edit</button>
+                            <button class="text-red-600 hover:text-red-800" onclick="deleteContact(${contact.id})">Delete</button>
+                        </td>
+                    </tr>
+                `).join('');
+             }
+
+            // Update Items Table
+            const itemsTable = document.getElementById('itemsTable');
+             if (itemsTable) {
+                itemsTable.innerHTML = data.items.map(item => `
+                    <tr class="hover:bg-gray-50">
+                        <td class="px-6 py-4 whitespace-nowrap">${item.id}</td>
+                        <td class="px-6 py-4 whitespace-nowrap">${escapeHTML(item.name)}</td>
+                        <td class="px-6 py-4 whitespace-nowrap">${escapeHTML(item.unit)}</td>
+                        <td class="px-6 py-4 whitespace-nowrap">${escapeHTML(item.hsnCode || '')}</td>
+                        <td class="px-6 py-4 whitespace-nowrap">${item.gstPercentage !== undefined && item.gstPercentage !== null ? escapeHTML(item.gstPercentage.toFixed(2)) : ''}</td>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            <button class="text-yellow-600 hover:text-yellow-800 mr-2" onclick="openItemModal(${item.id})">Edit</button>
+                            <button class="text-red-600 hover:text-red-800" onclick="deleteItem(${item.id})">Delete</button>
+                        </td>
+                    </tr>
+                `).join('');
+            }
+
+            // Update Purchases Table
+            const purchasesTable = document.getElementById('purchasesTable');
+             if (purchasesTable) {
+                purchasesTable.innerHTML = data.purchases.map(purchase => {
+                    const supplier = data.contacts.find(c => c.id === purchase.supplierId);
+                    let itemsHtml = '';
+                    if (purchase.items && Array.isArray(purchase.items)) {
+                        itemsHtml = purchase.items.map(item => {
+                            const itemData = data.items.find(i => i.id === Number(item.itemId)); // Ensure itemId is number
+                            const itemName = itemData ? escapeHTML(itemData.name) : 'N/A';
+                            const itemUnit = itemData ? escapeHTML(itemData.unit) : '';
+                             const gstInfo = item.enableGST ?
+                                 ` (GST: ${item.gstPercentage !== undefined && item.gstPercentage !== null ? item.gstPercentage : 'N/A'}%, CGST: ${(item.cgst || 0).toFixed(2)}, SGST: ${(item.sgst || 0).toFixed(2)})` :
+                                 '';
+                            return `
+                                <div>
+                                    ${itemName} (${itemUnit}) - Qty: ${item.quantity !== undefined && item.quantity !== null ? item.quantity : 'N/A'},
+                                    Price/Unit: ${(item.pricePerUnit !== undefined && item.pricePerUnit !== null ? item.pricePerUnit : 0).toFixed(2)},
+                                    Total: ${(item.total !== undefined && item.total !== null ? item.total : 0).toFixed(2)}${gstInfo}
+                                </div>
+                            `;
+                        }).join('');
+                    } else {
+                        itemsHtml = '<div>No items</div>';
+                    }
+                     const paymentDateDisplay = purchase.paymentStatus === 'paid' ? (purchase.paymentDate || 'N/A') : 'N/A';
+                    return `
+                        <tr class="hover:bg-gray-50">
+                            <td class="px-6 py-4 whitespace-nowrap">${purchase.id}</td>
+                            <td class="px-6 py-4 whitespace-nowrap">${escapeHTML(purchase.date || '')}</td>
+                            <td class="px-6 py-4 whitespace-nowrap">${supplier ? escapeHTML(supplier.name) : 'N/A'}</td>
+                            <td class="px-6 py-4">${itemsHtml}</td> <!-- Removed whitespace-nowrap -->
+                            <td class="px-6 py-4 whitespace-nowrap">${escapeHTML(purchase.paymentStatus || 'pending')}</td>
+                            <td class="px-6 py-4 whitespace-nowrap">${escapeHTML(paymentDateDisplay)}</td>
+                            <td class="px-6 py-4 whitespace-nowrap">
+                                <button class="text-yellow-600 hover:text-yellow-800 mr-2" onclick="openPurchaseModal(${purchase.id})">Edit</button>
+                                <button class="text-red-600 hover:text-red-800" onclick="deletePurchase(${purchase.id})">Delete</button>
+                            </td>
+                        </tr>
+                    `;
+                }).join('');
+            }
+
+            // Update Delivery Challans Table
+            const deliveryChallansTable = document.getElementById('deliveryChallansTable');
+             if (deliveryChallansTable) {
+                deliveryChallansTable.innerHTML = data.deliveryChallans.map(challan => {
+                    const party = data.contacts.find(c => c.id === challan.partyId);
+                    let itemsHtml = '';
+                    if (challan.items && Array.isArray(challan.items)) {
+                         itemsHtml = challan.items.map(item => {
+                             const itemData = data.items.find(i => i.id === Number(item.itemId)); // Ensure itemId is number
+                             const itemName = itemData ? escapeHTML(itemData.name) : 'N/A';
+                             const itemUnit = itemData ? escapeHTML(itemData.unit) : '';
+                             const gstInfo = item.enableGST ?
+                                 ` (GST: ${item.gstPercentage !== undefined && item.gstPercentage !== null ? item.gstPercentage : 'N/A'}%, CGST: ${(item.cgst || 0).toFixed(2)}, SGST: ${(item.sgst || 0).toFixed(2)})` :
+                                 '';
+                            return `
+                                <div>
+                                    ${itemName} (${itemUnit}) - Qty: ${item.quantity !== undefined && item.quantity !== null ? item.quantity : 'N/A'},
+                                    Price/Unit: ${(item.pricePerUnit !== undefined && item.pricePerUnit !== null ? item.pricePerUnit : 0).toFixed(2)},
+                                    Total: ${(item.total !== undefined && item.total !== null ? item.total : 0).toFixed(2)}${gstInfo}
+                                </div>
+                            `;
+                        }).join('');
+                    } else {
+                        itemsHtml = '<div>No items</div>';
+                    }
+                     const paymentDateDisplay = challan.paymentStatus === 'paid' ? (challan.paymentDate || 'N/A') : 'N/A';
+                    return `
+                        <tr class="hover:bg-gray-50">
+                            <td class="px-6 py-4 whitespace-nowrap">${challan.id}</td>
+                            <td class="px-6 py-4 whitespace-nowrap">${escapeHTML(challan.challanNo || 'N/A')}</td>
+                            <td class="px-6 py-4 whitespace-nowrap">${escapeHTML(challan.date || '')}</td>
+                            <td class="px-6 py-4 whitespace-nowrap">${party ? escapeHTML(party.name) : 'N/A'}</td>
+                            <td class="px-6 py-4">${itemsHtml}</td> <!-- Removed whitespace-nowrap -->
+                            <td class="px-6 py-4 whitespace-nowrap">${escapeHTML(challan.paymentStatus || 'pending')}</td>
+                            <td class="px-6 py-4 whitespace-nowrap">${escapeHTML(paymentDateDisplay)}</td>
+                            <td class="px-6 py-4 whitespace-nowrap">
+                                <button class="text-yellow-600 hover:text-yellow-800 mr-2" onclick="openDeliveryChallanModal(${challan.id})">Edit</button>
+                                <button class="text-red-600 hover:text-red-800" onclick="deleteDeliveryChallan(${challan.id})">Delete</button>
+                            </td>
+                        </tr>
+                    `;
+                }).join('');
+            }
+
+            // Update Stock Table (using calculated stock)
+            const stockTable = document.getElementById('stockTable');
+             if (stockTable) {
+                 // Filter out items that no longer exist in the items list
+                 const displayStock = data.stock.filter(s => data.items.some(i => i.id === s.itemId));
+                stockTable.innerHTML = displayStock.map(stock => {
+                    const item = data.items.find(i => i.id === stock.itemId);
+                    // Only display if item still exists and stock > 0 (or maybe display 0 stock?)
+                     if (item && stock.quantity > 0) { // Only show items with positive stock
+                         return `
+                            <tr class="hover:bg-gray-50">
+                                <td class="px-6 py-4 whitespace-nowrap">${escapeHTML(item.name)}</td>
+                                <td class="px-6 py-4 whitespace-nowrap">${stock.quantity}</td>
+                                <td class="px-6 py-4 whitespace-nowrap">${escapeHTML(item.unit)}</td>
+                            </tr>
+                        `;
+                     } else {
+                         return ''; // Don't display items with 0 or negative stock, or unknown items
+                     }
+                }).join('');
+            }
+            // Clear spinners after UI update is complete
+             hideSpinner('contactSaveSpinner');
+             hideSpinner('itemSaveSpinner');
+             hideSpinner('purchaseSaveSpinner');
+             hideSpinner('deliveryChallanSaveSpinner');
+             // hideSpinner('stockSaveSpinner'); // Removed
+        }
+         // Helper function to escape HTML for display in table cells
+         function escapeHTML(str) {
+             if (typeof str !== 'string') {
+                 return str; // Return non-strings as is
+             }
+            return str.replace(/[&<>"']/g, function(match) {
+                return {
+                    '&': '&amp;',
+                    '<': '&lt;',
+                    '>': '&gt;',
+                    '"': '&quot;',
+                    "'": '&#39;'
+                }[match];
+            });
+         }
+
+        function populatePurchaseDropdowns() {
+            populateDropdown('purchaseSupplier', data.contacts.filter(c => c.type === 'supplier'), 'id', 'name');
+            document.querySelectorAll('.purchaseItemSelect').forEach(select => populateItemDropdown(select));
+        }
+        function populateDeliveryChallanDropdowns() {
+            populateDropdown('deliveryChallanParty', data.contacts.filter(c => c.type === 'party'), 'id', 'name');
+            document.querySelectorAll('.deliveryChallanItemSelect').forEach(select => populateItemDropdown(select));
+        }
+         // Function to clear all data from Local Storage and reset the app
+         function clearAllData() {
+             if (confirm('Are you sure you want to delete ALL data? This action cannot be undone.')) {
+                 localStorage.removeItem(localStorageKey);
+                 data = { contacts: [], items: [], purchases: [], deliveryChallans: [], stock: [] };
+                 updateUI();
+                 showToast('All data cleared', 'success');
+             }
+         }
+        // --- Initialization ---
+        // Load data from Local Storage when the script starts
+        loadData();
+        // Apply dark mode preference on load
+        if (localStorage.getItem('darkMode') === 'true') {
+            document.body.classList.add('dark-mode');
+        }
+        // Set initial section (Dashboard) - already done at the end, but could be part of init
+        showSection('dashboard');
+        // The initial updateUI() is called by loadData() now.
+        // Add event listener for payment status change once on load for the first item in modal templates
+        // Listeners for dynamically added items are added when the item div is created.
+        // Or even better, use event delegation for efficiency.
+        // For simplicity now, we add/remove listeners on modal open/close for the main select.
+        // Item-level listeners would need delegation or adding on item creation.
+    </script>
+</body>
+</html>
